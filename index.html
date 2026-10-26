@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JM Store — Preview</title>
+<style>
+:root{--p:#0a2540;--a:#e6b89c;--bg:#f5f0eb;--t:#222}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--t);margin:0;line-height:1.45}
+header{background:linear-gradient(135deg,var(--p) 0%,#14355c 100%);color:#fff;padding:3rem 1rem;text-align:center}
+.header-inner{max-width:960px;margin:auto}
+h1{font-size:2.6rem;margin:0 0 .2rem;letter-spacing:-2px}
+p.sub{opacity:.85;font-size:1.1rem}
+main{max-width:960px;margin:2rem auto;padding:0 1rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.2rem}
+.card{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 10px rgba(0,0,0,.06);border-top:4px solid var(--a)}
+.card h3{margin:0 0 .3rem;font-size:1.15rem;color:var(--p)}
+.card .price{font-weight:700;color:var(--a);font-size:1.05rem}
+.card .meta{font-size:.82rem;color:#666;margin-top:.4rem}
+.badge{display:inline-block;padding:.2rem .6rem;border-radius:999px;font-size:.75rem;font-weight:600;background:var(--p);color:#fff;margin-top:.6rem}
+footer{text-align:center;padding:2rem 1rem;color:#777;font-size:.9rem;border-top:1px solid #ddd;margin-top:3rem}
+</style>
+</head>
+<body>
+<header><div class="header-inner"><h1>JM Store</h1><p class="sub">E-commerce · Design aprovado · Phase 1-3 concluído</p></div></header>
+<main>
+<section aria-label="Produtos"><h2>Produtos</h2>
+<div class="grid">
+<div class="card"><h3>Notebook X</h3><div class="price">R$ 3.500,00</div><div class="meta">Categoria: Eletronicos · Estoque: 10</div><span class="badge">Em estoque</span></div>
+<div class="card"><h3>Mouse RGB</h3><div class="price">R$ 150,00</div><div class="meta">Categoria: Acessorios · Estoque: 50</div><span class="badge">Em estoque</span></div>
+</div></section>
+<section aria-label="Status" style="margin-top:2rem;"><h2>Status do Projeto</h2>
+<div class="grid">
+<div class="card"><h3>Design</h3><div class="meta">Specification aprovada (3:59 PM)</div><span class="badge">Concluído</span></div>
+<div class="card"><h3>Phase 1</h3><div class="meta">Scaffold, entidades, DB, build</div><span class="badge">Concluído</span></div>
+<div class="card"><h3>Phase 2</h3><div class="meta">Controllers REST, seed, testes</div><span class="badge">Concluído</span></div>
+<div class="card"><h3>Phase 3</h3><div class="meta">Security config, Docker, deploy</div><span class="badge">Concluído</span></div>
+</div></section>
+</main>
+<footer>JM Store E-commerce · Preview para GitHub Pages · 2026-10-26</footer>
+</body>
+</html>
