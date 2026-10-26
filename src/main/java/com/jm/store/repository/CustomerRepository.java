@@ -1,1 +1,0 @@
-package com.jm.store.repository; import org.springframework.data.jpa.repository.JpaRepository; import com.jm.store.entity.Customer; import java.util.*; public interface CustomerRepository extends JpaRepository<Customer, Long> {}
