@@ -7,7 +7,14 @@
   var KEY = 'jm-admin-v1';
   var AUTH = window.JMAuth;
   var cloud = !!(AUTH && AUTH.enabled);
-  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog'];
+  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders'];
+  // Status dos pedidos do site (os mesmos rótulos aparecem para o cliente em "Meus pedidos").
+  var ORDER_STATUS = [
+    ['novo', 'Novo', 'warn'], ['confirmado', 'Confirmado', 'ok'], ['pago', 'Pago', 'ok'],
+    ['enviado', 'Saiu para entrega', 'ok'], ['retirar', 'Pronto para retirada', 'ok'],
+    ['entregue', 'Entregue', 'neutral'], ['cancelado', 'Cancelado', 'err']
+  ];
+  var CLIENT_LABEL = { novo: 'aguardando confirmação', confirmado: 'confirmado', pago: 'pago', enviado: 'saiu para entrega', retirar: 'pronto para retirada', entregue: 'entregue', cancelado: 'cancelado' };
   var CATS = window.JM_CATEGORIES || [];
   var PAYMENTS = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Fiado'];
   var app = document.getElementById('app');
@@ -148,6 +155,9 @@
     }
   }
 
+  // Catálogo e pedidos do site não fazem parte do backup: são mantidos ao reiniciar ou importar.
+  function keepCloud(data) { return Object.assign(data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [] }); }
+
   function applySnap(col, snap) {
     db[col] = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
     synced[col] = {};
@@ -162,7 +172,7 @@
   function startCloud() {
     stopCloud();
     app.innerHTML = '<p class="empty">Carregando os dados da loja…</p>';
-    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [] };
+    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [] };
     COLS.forEach(function (col) {
       unsubs.push(fs.collection(col).onSnapshot(function (snap) {
         if (!loaded[col]) {
@@ -172,13 +182,19 @@
           if (COLS.every(function (c) { return loaded[c]; })) firstLoad();
           return;
         }
+        if (col === 'orders') {
+          snap.docChanges().forEach(function (ch) {
+            var o = ch.doc.data();
+            if (ch.type === 'added' && o.status === 'novo') toast('🛍️ Novo pedido #' + o.code + ' de ' + o.customer.name + '!');
+          });
+        }
         if (modal.open) { deferred[col] = snap; return; }
         applySnap(col, snap);
         render();
       }, function (e) {
         stopCloud();
         gate('<h1>Não foi possível abrir</h1><p>' + (e && e.code === 'permission-denied'
-          ? 'O Firestore recusou o acesso. Confira se as regras de firestore.rules foram publicadas.'
+          ? 'O Firestore recusou o acesso. Publique no console do Firebase a versão mais recente das regras (arquivo firestore.rules).'
           : 'Confira sua conexão com a internet e recarregue a página.') + '</p>');
       }));
     });
@@ -190,9 +206,9 @@
       var local = loadLocal();
       if (local && confirm('Encontramos dados da gestão salvos neste navegador (' + local.sales.length + ' venda(s), ' +
           local.customers.length + ' cliente(s)). Enviar para a nuvem?')) {
-        db = { products: local.products, customers: local.customers, sales: local.sales, coupons: local.coupons, catalog: db.catalog };
+        db = keepCloud({ products: local.products, customers: local.customers, sales: local.sales, coupons: local.coupons });
       } else {
-        db = Object.assign(seed(), { catalog: db.catalog });
+        db = keepCloud(seed());
       }
     }
     db.products.forEach(enrich);
@@ -251,6 +267,7 @@
     var monthLabel = new Date().toLocaleDateString('pt-BR', { month: 'long' });
 
     return '' +
+      (newOrders().length ? '<p class="notice notice--ok">🛍️ ' + newOrders().length + ' pedido(s) novo(s) do site. <a href="#/pedidos">Ver pedidos</a></p>' : '') +
       '<div class="head"><div><h1>Painel</h1><p class="muted">Resumo de ' + monthLabel + '</p></div>' +
       '<div class="actions"><button class="btn" data-action="new-sale">+ Nova venda</button></div></div>' +
       '<section class="stats">' +
@@ -376,6 +393,79 @@
         }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum cliente cadastrado ainda.</p>');
   }
 
+  function newOrders() { return (db.orders || []).filter(function (o) { return o.status === 'novo'; }); }
+  function orderMillis(o) { return o.createdAt && o.createdAt.toMillis ? o.createdAt.toMillis() : 0; }
+  function orderWhen(o) {
+    if (!o.createdAt || !o.createdAt.toDate) return '—';
+    var d = o.createdAt.toDate();
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function waTo(phone, text) {
+    var d = digits(phone);
+    return d ? 'https://wa.me/' + (d.length <= 11 ? '55' : '') + d + '?text=' + encodeURIComponent(text) : '';
+  }
+
+  filters.pedidos = { status: 'abertos' };
+  function viewPedidos() {
+    var f = filters.pedidos;
+    var list = (db.orders || []).filter(function (o) {
+      if (f.status === 'abertos') return o.status !== 'entregue' && o.status !== 'cancelado';
+      return !f.status || o.status === f.status;
+    }).sort(function (a, b) { return orderMillis(b) - orderMillis(a); });
+    return '' +
+      '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
+      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '') +
+      '<div class="toolbar"><select data-filter="pedidos.status" aria-label="Status">' +
+        opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) +
+        ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
+        '<span class="count">' + list.length + ' pedido(s)</span></div>' +
+      (list.length ? '<div class="orders">' + list.map(function (o) {
+        var st = ORDER_STATUS.find(function (s) { return s[0] === o.status; }) || ORDER_STATUS[0];
+        var first = (o.customer.name || '').split(' ')[0];
+        var wa = waTo(o.customer.phone, 'Olá, ' + first + '! Aqui é da JM Store. Seu pedido #' + o.code + ' está: ' + (CLIENT_LABEL[o.status] || o.status) + '.');
+        return '<article class="panel order' + (o.status === 'novo' ? ' order--new' : '') + '">' +
+          '<header><div><h2>#' + esc(o.code) + ' <span class="pill pill--' + st[2] + '">' + st[1] + '</span></h2>' +
+            '<p class="muted">' + orderWhen(o) + ' · <b>' + esc(o.customer.name) + '</b>' +
+            (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(o.customer.phone) + '</a>' : '') + '</p></div>' +
+            '<b class="order__total">' + brl(o.total) + '</b></header>' +
+          '<ul class="order__items">' + o.items.map(function (i) {
+            return '<li>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' <span class="muted">' + brl(i.price * i.qty) + '</span></li>';
+          }).join('') + '</ul>' +
+          '<p class="order__meta">' + (o.delivery.type === 'pickup' ? '🏬 Retirada na loja' : '🚚 ' + esc(o.delivery.address) + ' · frete ' + brl(o.delivery.fee)) +
+            ' · 💳 ' + esc(o.payment) + (o.coupon ? ' · 🏷️ ' + esc(o.coupon.code) + ' (−' + brl(o.coupon.discount) + ')' : '') +
+            (o.notes ? '<br>📝 ' + esc(o.notes) : '') + '</p>' +
+          '<footer><label>Status <select data-order-status="' + o.id + '">' + ORDER_STATUS.map(function (s) { return opt(s[0], s[1], o.status); }).join('') + '</select></label>' +
+            (o.saleId ? '<span class="muted">✓ Venda lançada</span>' : '<button class="btn btn--sm" data-action="order-to-sale" data-id="' + o.id + '">Lançar venda e baixar estoque</button>') +
+            (wa ? '<a class="btn btn--ghost btn--sm" href="' + wa + '" target="_blank" rel="noopener">Avisar cliente no WhatsApp</a>' : '') +
+          '</footer></article>';
+      }).join('') + '</div>' : '<p class="empty">Nenhum pedido aqui.</p>');
+  }
+
+  // Transforma um pedido do site em venda: cadastra/acha o cliente e dá baixa no estoque.
+  function orderToSale(o) {
+    var phone = digits(o.customer.phone);
+    var c = phone && db.customers.find(function (x) { return digits(x.phone) === phone; });
+    if (!c) {
+      c = { id: uid('c'), name: o.customer.name, phone: o.customer.phone, neighborhood: o.delivery.neighborhood || '', notes: o.customer.email || '' };
+      db.customers.push(c);
+    }
+    var payMap = { 'PIX': 'PIX', 'Pagar na entrega': 'Dinheiro' };
+    var sale = {
+      id: uid('v'), createdAt: Date.now(), date: today(), customerId: c.id,
+      payment: payMap[o.payment] || 'PIX',
+      status: ['pago', 'enviado', 'retirar', 'entregue'].indexOf(o.status) !== -1 ? 'pago' : 'pendente',
+      discount: o.coupon ? o.coupon.discount : 0,
+      items: o.items.map(function (i) {
+        var p = product(i.productId);
+        return { productId: i.productId, name: i.name + (i.variant ? ' (' + i.variant + ')' : ''), qty: i.qty, price: i.price, cost: p ? p.cost : 0 };
+      })
+    };
+    sale.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock -= i.qty; });
+    db.sales.push(sale);
+    o.saleId = sale.id;
+    if (o.status === 'novo') o.status = 'confirmado';
+  }
+
   function couponLabel(c) { return c.type === 'percent' ? c.value + '%' : brl(c.value); }
   function viewCupons() {
     var list = db.coupons.slice().sort(function (a, b) { return a.code.localeCompare(b.code); });
@@ -414,12 +504,14 @@
   }
 
   // ---------- roteamento ----------
-  var ROUTES = { '': ['painel', viewPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], clientes: ['clientes', viewClientes], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
+  var ROUTES = { '': ['painel', viewPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], clientes: ['clientes', viewClientes], pedidos: ['pedidos', viewPedidos], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
   function route() { return location.hash.replace(/^#\/?/, ''); }
   function render() {
     if (!db) return;
     var r = ROUTES[route()] || ROUTES[''];
     app.innerHTML = (cloud ? '' : '<p class="notice">Login desligado: qualquer pessoa com o link abre esta página e os dados ficam só neste navegador. Veja no README como ativar o login.</p>') + r[1]();
+    var badge = $('#orders-badge'), n = newOrders().length;
+    if (badge) { badge.textContent = n; badge.hidden = !n; }
     $$('[data-nav]').forEach(function (a) {
       if (a.dataset.nav === r[0]) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
@@ -691,6 +783,12 @@
     },
     'new-customer': function () { customerForm(null); },
     'new-coupon': function () { couponForm(null); },
+    'order-to-sale': function (id) {
+      var o = db.orders.find(function (o) { return o.id === id; });
+      if (!confirm('Lançar o pedido #' + o.code + ' como venda? O estoque dos produtos vai baixar.')) return;
+      orderToSale(o);
+      save(); render(); toast('Venda lançada e estoque atualizado.');
+    },
     'edit-coupon': function (id) { couponForm(db.coupons.find(function (c) { return c.id === id; })); },
     'toggle-coupon': function (id) {
       var c = db.coupons.find(function (c) { return c.id === id; });
@@ -721,7 +819,7 @@
     },
     reset: function () {
       if (!confirm('Apagar todas as vendas, clientes e alterações de produtos?')) return;
-      db = Object.assign(seed(), { catalog: db.catalog || [] }); save(); render(); toast('Dados reiniciados.');
+      db = keepCloud(seed()); save(); render(); toast('Dados reiniciados.');
     }
   };
 
@@ -743,6 +841,13 @@
   });
 
   app.addEventListener('change', function (e) {
+    var oid = e.target.dataset.orderStatus;
+    if (oid) {
+      var o = db.orders.find(function (o) { return o.id === oid; });
+      o.status = e.target.value;
+      save(); render(); toast('Pedido #' + o.code + ': ' + e.target.selectedOptions[0].textContent + '.');
+      return;
+    }
     if (e.target.dataset.action !== 'import' || !e.target.files[0]) return;
     var reader = new FileReader();
     reader.onload = function () {
@@ -752,7 +857,7 @@
         if (!confirm('Substituir os dados atuais por este backup?')) return;
         data.coupons = data.coupons || [];
         data.products.forEach(enrich);
-        db = Object.assign(data, { catalog: db.catalog || [] }); save(); render(); toast('Backup importado.');
+        db = keepCloud(data); save(); render(); toast('Backup importado.');
       } catch (err) { toast('Arquivo de backup inválido.'); }
     };
     reader.readAsText(e.target.files[0]);
@@ -761,6 +866,7 @@
   window.addEventListener('hashchange', function () { render(); app.focus(); });
   if (!cloud) {
     db = loadLocal() || seed();
+    db.orders = [];
     db.products.forEach(enrich);
     render();
   } else {

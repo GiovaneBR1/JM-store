@@ -8,6 +8,16 @@
   var DARK = '#6E412A';
   var AUTH = window.JMAuth;
   var LOGIN_MSG = 'Entre na sua conta para colocar produtos na sacola e finalizar o pedido.';
+  // Status dos pedidos do site (mudados pela gestão).
+  var ORDER_STATUS = {
+    novo: ['Aguardando confirmação', 'warn'],
+    confirmado: ['Confirmado', 'ok'],
+    pago: ['Pago', 'ok'],
+    enviado: ['Saiu para entrega', 'ok'],
+    retirar: ['Pronto para retirada', 'ok'],
+    entregue: ['Entregue', 'done'],
+    cancelado: ['Cancelado', 'err']
+  };
 
   // ---------- helpers ----------
   function $(sel, el) { return (el || document).querySelector(sel); }
@@ -564,6 +574,27 @@
       var link = waLink(msg);
       window.open(link, '_blank', 'noopener');
 
+      // Salva o pedido na conta do cliente e na gestão (mesmo que ele não envie a mensagem).
+      if (AUTH.user) {
+        AUTH.firestore().collection('orders').add({
+          code: id, uid: AUTH.user.uid, status: 'novo',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          customer: { name: form.fullname.value.trim(), phone: form.phone.value.trim(), email: AUTH.user.email || '' },
+          items: cart.map(function (l) {
+            var p = byId(l.id);
+            return { productId: p.id, name: p.name, variant: l.v || '', qty: l.q, price: unitPrice(p, l.v) };
+          }),
+          subtotal: subtotal(),
+          coupon: disc ? { code: coupon.code, discount: disc } : null,
+          delivery: isPickup()
+            ? { type: 'pickup', fee: 0, address: C.pickupAddress }
+            : { type: 'delivery', fee: ship, zone: zoneOf().name, neighborhood: form.hood.value.trim(), address: where },
+          payment: payText,
+          notes: form.notes.value.trim(),
+          total: total
+        }).catch(function () { toast('Não foi possível salvar o pedido na sua conta. Ele segue pelo WhatsApp.'); });
+      }
+
       cart = []; save();
       viewDone(id, total, pay, link);
     });
@@ -578,6 +609,7 @@
         '<button type="button" class="btn btn--ghost" id="copy-pix">Copiar chave PIX</button>' +
         '<span class="note">Depois de pagar, mande o comprovante na mesma conversa.</span></div>' : '') +
       '<div class="btns" style="margin-top:1.5rem"><a class="btn btn--wa" href="' + link + '" target="_blank" rel="noopener">Abrir o WhatsApp de novo</a>' +
+      (AUTH.user ? '<a class="btn btn--ghost" href="#/pedidos">Acompanhar em Meus pedidos</a>' : '') +
       '<a class="btn btn--ghost" href="#/">Voltar à loja</a></div></div>';
     app.focus();
     window.scrollTo(0, 0);
@@ -589,12 +621,60 @@
     });
   }
 
+  // ---------- meus pedidos ----------
+  function orderDate(o) {
+    var d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : new Date();
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' às ' +
+      d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function orderTime(o) { return o.createdAt && o.createdAt.toMillis ? o.createdAt.toMillis() : Date.now(); }
+
+  var stopOrders = null;
+  function viewOrders() {
+    document.title = 'Meus pedidos — JM Store';
+    if (!AUTH.enabled) { location.hash = '#/'; return; }
+    if (!AUTH.user) {
+      app.innerHTML = '<div class="wrap done"><h1>Meus pedidos</h1><p>Entre na sua conta para ver seus pedidos.</p>' +
+        '<div class="btns" style="margin-top:1.5rem"><button type="button" class="btn btn--main" data-acct="login">Entrar</button></div></div>';
+      return;
+    }
+    app.innerHTML = '<div class="wrap orders"><h1>Meus pedidos</h1><div id="orders-list"><p class="note">Carregando…</p></div></div>';
+    // Ao vivo: quando a loja muda o status, a tela atualiza sozinha.
+    stopOrders = AUTH.firestore().collection('orders').where('uid', '==', AUTH.user.uid).onSnapshot(function (snap) {
+      var box = $('#orders-list');
+      if (!box) return;
+      var list = snap.docs.map(function (d) { return d.data(); }).sort(function (a, b) { return orderTime(b) - orderTime(a); });
+      if (!list.length) {
+        box.innerHTML = '<div class="empty"><h3>Nenhum pedido ainda</h3><p>Quando você finalizar uma compra, ela aparece aqui.</p>' +
+          '<a class="btn btn--main" href="#/">Ver produtos</a></div>';
+        return;
+      }
+      box.innerHTML = list.map(function (o) {
+        var st = ORDER_STATUS[o.status] || [o.status, 'warn'];
+        return '<article class="order"><header><div><h2>Pedido #' + esc(o.code) + '</h2><small>' + orderDate(o) + '</small></div>' +
+          '<span class="order__status order__status--' + st[1] + '">' + esc(st[0]) + '</span></header>' +
+          '<ul>' + o.items.map(function (i) {
+            return '<li><span>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + '</span><span>' + brl(i.price * i.qty) + '</span></li>';
+          }).join('') + '</ul>' +
+          '<footer><span>' + (o.delivery && o.delivery.type === 'pickup' ? 'Retirada na loja' : 'Entrega' + (o.delivery && o.delivery.neighborhood ? ' · ' + esc(o.delivery.neighborhood) : '')) +
+            ' · ' + esc(o.payment) + (o.coupon ? ' · cupom ' + esc(o.coupon.code) : '') + '</span><b>' + brl(o.total) + '</b></footer>' +
+          '<p class="order__help"><a href="' + waLink('Olá! Quero falar sobre o meu pedido #' + o.code + '.') + '" target="_blank" rel="noopener">Falar sobre este pedido</a></p>' +
+          '</article>';
+      }).join('');
+    }, function () {
+      var box = $('#orders-list');
+      if (box) box.innerHTML = '<p class="note">Não foi possível carregar seus pedidos agora. Recarregue a página.</p>';
+    });
+  }
+
   // ---------- router ----------
   var first = true;
   function route() {
     var parts = location.hash.replace(/^#\/?/, '').split('/');
     closeDrawer(false);
-    if (parts[0] === 'produto') viewProduct(decodeURIComponent(parts[1] || ''));
+    if (stopOrders) { stopOrders(); stopOrders = null; }
+    if (parts[0] === 'pedidos') viewOrders();
+    else if (parts[0] === 'produto') viewProduct(decodeURIComponent(parts[1] || ''));
     else if (parts[0] === 'categoria') viewCategory(parts[1]);
     else if (parts[0] === 'checkout') viewCheckout();
     else viewHome();
@@ -672,6 +752,6 @@
     // Ao sair da conta, a sacola é esvaziada (útil em aparelho compartilhado).
     if (wasLogged && !s.user) { cart = []; save(); }
     wasLogged = !!s.user;
-    if (started && location.hash === '#/checkout') route();
+    if (started && (location.hash === '#/checkout' || location.hash === '#/pedidos')) route();
   });
 })();

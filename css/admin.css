@@ -150,3 +150,21 @@ td .sub { display: block; font-size: .82rem; color: var(--brown-2); }
 .photo__btns small { color: var(--brown-2); font-size: .8rem; }
 .check { display: flex; align-items: center; gap: .5rem; font-size: .92rem; }
 .check input { width: 1.1rem; height: 1.1rem; accent-color: var(--malva-ink); }
+
+/* Pedidos do site */
+.badge { display: inline-grid; place-items: center; min-width: 1.25rem; height: 1.25rem; padding: 0 .3rem; margin-left: .2rem; border-radius: 9999px; background: #E9B949; color: var(--brown); font-size: .75rem; font-weight: 700; }
+.badge[hidden] { display: none; }
+.orders { display: grid; gap: 1rem; }
+.order header { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+.order h2 { font-size: 1.45rem; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.order h2 .pill { font-family: var(--sans); }
+.order header p { margin-top: .2rem; font-size: .9rem; }
+.order__total { font: 600 1.5rem var(--serif); white-space: nowrap; }
+.order__items { margin: .85rem 0 0; padding-left: 1.1rem; display: grid; gap: .2rem; font-size: .93rem; }
+.order__meta { margin-top: .75rem; font-size: .9rem; color: var(--brown-2); }
+.order footer { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--pastel-soft); }
+.order footer label { display: flex; align-items: center; gap: .4rem; font-size: .9rem; }
+.order footer select { border: 1px solid var(--rosa); background: #fff; border-radius: var(--r-md); padding: .35rem .5rem; }
+.order--new { border-color: #E9B949; box-shadow: 0 0 0 2px rgba(233, 185, 73, .25); }
+.notice.notice--ok { background: #E9F0E5; color: var(--ok); }
+.notice.notice--ok a { color: var(--ok); font-weight: 500; }
