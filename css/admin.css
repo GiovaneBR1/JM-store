@@ -168,3 +168,9 @@ td .sub { display: block; font-size: .82rem; color: var(--brown-2); }
 .order--new { border-color: #E9B949; box-shadow: 0 0 0 2px rgba(233, 185, 73, .25); }
 .notice.notice--ok { background: #E9F0E5; color: var(--ok); }
 .notice.notice--ok a { color: var(--ok); font-weight: 500; }
+.return { margin-top: .85rem; padding: .7rem .9rem; border-radius: var(--r-md); font-size: .92rem; background: var(--pastel-soft); }
+.return--warn { background: #F6EEDB; }
+.return--ok { background: #E9F0E5; }
+.return--err { background: #F7E4E4; }
+.return p + p { margin-top: .3rem; }
+.return__btns { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }

@@ -15,9 +15,17 @@
     pago: ['Pago', 'ok'],
     enviado: ['Saiu para entrega', 'ok'],
     retirar: ['Pronto para retirada', 'ok'],
-    entregue: ['Entregue', 'done'],
+    entregue: ['Compra finalizada ✓', 'done'],
     cancelado: ['Cancelado', 'err']
   };
+  var RETURN_STATUS = {
+    solicitada: ['Devolução solicitada', 'Recebemos seu pedido de devolução. A loja vai responder em breve.', 'warn'],
+    aprovada: ['Devolução aprovada', 'Combine a entrega do produto com a loja pelo WhatsApp.', 'ok'],
+    recusada: ['Devolução recusada', '', 'err'],
+    concluida: ['Devolução concluída', 'O produto foi recebido e o reembolso, feito.', 'done']
+  };
+  var RETURN_REASONS = ['Produto com defeito', 'Recebi o produto errado', 'Me arrependi da compra', 'Outro motivo'];
+  var RETURN_DAYS = 7;
 
   // ---------- helpers ----------
   function $(sel, el) { return (el || document).querySelector(sel); }
@@ -640,31 +648,79 @@
     }
     app.innerHTML = '<div class="wrap orders"><h1>Meus pedidos</h1><div id="orders-list"><p class="note">Carregando…</p></div></div>';
     // Ao vivo: quando a loja muda o status, a tela atualiza sozinha.
+    var pending = null;
     stopOrders = AUTH.firestore().collection('orders').where('uid', '==', AUTH.user.uid).onSnapshot(function (snap) {
-      var box = $('#orders-list');
-      if (!box) return;
-      var list = snap.docs.map(function (d) { return d.data(); }).sort(function (a, b) { return orderTime(b) - orderTime(a); });
-      if (!list.length) {
-        box.innerHTML = '<div class="empty"><h3>Nenhum pedido ainda</h3><p>Quando você finalizar uma compra, ela aparece aqui.</p>' +
-          '<a class="btn btn--main" href="#/">Ver produtos</a></div>';
-        return;
-      }
-      box.innerHTML = list.map(function (o) {
-        var st = ORDER_STATUS[o.status] || [o.status, 'warn'];
-        return '<article class="order"><header><div><h2>Pedido #' + esc(o.code) + '</h2><small>' + orderDate(o) + '</small></div>' +
-          '<span class="order__status order__status--' + st[1] + '">' + esc(st[0]) + '</span></header>' +
-          '<ul>' + o.items.map(function (i) {
-            return '<li><span>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + '</span><span>' + brl(i.price * i.qty) + '</span></li>';
-          }).join('') + '</ul>' +
-          '<footer><span>' + (o.delivery && o.delivery.type === 'pickup' ? 'Retirada na loja' : 'Entrega' + (o.delivery && o.delivery.neighborhood ? ' · ' + esc(o.delivery.neighborhood) : '')) +
-            ' · ' + esc(o.payment) + (o.coupon ? ' · cupom ' + esc(o.coupon.code) : '') + '</span><b>' + brl(o.total) + '</b></footer>' +
-          '<p class="order__help"><a href="' + waLink('Olá! Quero falar sobre o meu pedido #' + o.code + '.') + '" target="_blank" rel="noopener">Falar sobre este pedido</a></p>' +
-          '</article>';
-      }).join('');
+      var list = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return orderTime(b) - orderTime(a); });
+      // Não redesenha enquanto o cliente preenche um pedido de devolução.
+      if ($('details.ret[open]')) { pending = list; return; }
+      drawOrders(list);
     }, function () {
       var box = $('#orders-list');
       if (box) box.innerHTML = '<p class="note">Não foi possível carregar seus pedidos agora. Recarregue a página.</p>';
     });
+
+    var box = $('#orders-list');
+    box.addEventListener('toggle', function (e) {
+      if (e.target.matches('details.ret') && !e.target.open && pending) { var l = pending; pending = null; drawOrders(l); }
+    }, true);
+    box.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var form = e.target, btn = $('button[type=submit]', form);
+      btn.disabled = true; btn.textContent = 'Enviando…';
+      AUTH.firestore().collection('orders').doc(form.dataset.order).update({
+        'return': { status: 'solicitada', reason: form.reason.value, details: form.details.value.trim(), requestedAt: firebase.firestore.FieldValue.serverTimestamp() }
+      }).then(function () {
+        toast('Pedido de devolução enviado. A loja vai responder em breve.');
+        var d = form.closest('details'); if (d) d.open = false;
+        if (pending) { var l = pending; pending = null; drawOrders(l); }
+      }, function () {
+        btn.disabled = false; btn.textContent = 'Enviar pedido de devolução';
+        toast('Não foi possível enviar. O prazo de devolução pode ter acabado.');
+      });
+    });
+  }
+
+  function shortDate(ms) { return new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }); }
+
+  function returnHtml(o) {
+    var r = o['return'];
+    if (r) {
+      var st = RETURN_STATUS[r.status] || [r.status, '', 'warn'];
+      return '<div class="ret-box ret-box--' + st[2] + '"><b>↩️ ' + st[0] + '</b>' +
+        (st[1] ? '<span>' + st[1] + '</span>' : '') + (r.note ? '<span>Mensagem da loja: ' + esc(r.note) + '</span>' : '') + '</div>';
+    }
+    if (o.status !== 'entregue' || !o.finishedAt || !o.finishedAt.toMillis) return '';
+    var limit = o.finishedAt.toMillis() + RETURN_DAYS * 864e5;
+    if (Date.now() > limit) return '';
+    return '<details class="ret"><summary>Solicitar devolução <small>(até ' + shortDate(limit) + ')</small></summary>' +
+      '<form data-order="' + esc(o.id) + '"><div class="field"><label>Motivo</label><select name="reason">' +
+        RETURN_REASONS.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>Conte o que aconteceu (opcional)</label><textarea name="details" maxlength="500" placeholder="Ex.: a tampa veio quebrada"></textarea></div>' +
+      '<button class="btn btn--main" type="submit">Enviar pedido de devolução</button></form></details>';
+  }
+
+  function drawOrders(list) {
+    var box = $('#orders-list');
+    if (!box) return;
+    if (!list.length) {
+      box.innerHTML = '<div class="empty"><h3>Nenhum pedido ainda</h3><p>Quando você finalizar uma compra, ela aparece aqui.</p>' +
+        '<a class="btn btn--main" href="#/">Ver produtos</a></div>';
+      return;
+    }
+    box.innerHTML = list.map(function (o) {
+      var st = ORDER_STATUS[o.status] || [o.status, 'warn'];
+      return '<article class="order"><header><div><h2>Pedido #' + esc(o.code) + '</h2><small>' + orderDate(o) +
+          (o.status === 'entregue' && o.finishedAt && o.finishedAt.toMillis ? ' · finalizada em ' + shortDate(o.finishedAt.toMillis()) : '') + '</small></div>' +
+        '<span class="order__status order__status--' + st[1] + '">' + esc(st[0]) + '</span></header>' +
+        '<ul>' + o.items.map(function (i) {
+          return '<li><span>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + '</span><span>' + brl(i.price * i.qty) + '</span></li>';
+        }).join('') + '</ul>' +
+        '<footer><span>' + (o.delivery && o.delivery.type === 'pickup' ? 'Retirada na loja' : 'Entrega' + (o.delivery && o.delivery.neighborhood ? ' · ' + esc(o.delivery.neighborhood) : '')) +
+          ' · ' + esc(o.payment) + (o.coupon ? ' · cupom ' + esc(o.coupon.code) : '') + '</span><b>' + brl(o.total) + '</b></footer>' +
+        returnHtml(o) +
+        '<p class="order__help"><a href="' + waLink('Olá! Quero falar sobre o meu pedido #' + o.code + '.') + '" target="_blank" rel="noopener">Falar sobre este pedido</a></p>' +
+        '</article>';
+    }).join('');
   }
 
   // ---------- router ----------

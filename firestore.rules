@@ -36,7 +36,20 @@ service cloud.firestore {
         && request.resource.data.status == 'novo';
       allow read: if request.auth != null
         && (resource.data.uid == request.auth.uid || isAdmin());
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || canRequestReturn();
+      allow delete: if isAdmin();
+    }
+
+    // O cliente pode pedir devolução uma única vez, até 7 dias depois de a compra ser finalizada,
+    // e só consegue gravar o campo "return" (com status "solicitada").
+    function canRequestReturn() {
+      return request.auth != null
+        && resource.data.uid == request.auth.uid
+        && resource.data.status == 'entregue'
+        && !('return' in resource.data)
+        && request.time < resource.data.finishedAt + duration.value(7, 'd')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['return'])
+        && request.resource.data['return'].status == 'solicitada';
     }
 
     // Cupons: o cliente só consegue conferir um código que já sabe (o ID do documento);

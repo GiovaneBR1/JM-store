@@ -12,9 +12,10 @@
   var ORDER_STATUS = [
     ['novo', 'Novo', 'warn'], ['confirmado', 'Confirmado', 'ok'], ['pago', 'Pago', 'ok'],
     ['enviado', 'Saiu para entrega', 'ok'], ['retirar', 'Pronto para retirada', 'ok'],
-    ['entregue', 'Entregue', 'neutral'], ['cancelado', 'Cancelado', 'err']
+    ['entregue', 'Finalizado', 'neutral'], ['cancelado', 'Cancelado', 'err']
   ];
-  var CLIENT_LABEL = { novo: 'aguardando confirmação', confirmado: 'confirmado', pago: 'pago', enviado: 'saiu para entrega', retirar: 'pronto para retirada', entregue: 'entregue', cancelado: 'cancelado' };
+  var CLIENT_LABEL = { novo: 'aguardando confirmação', confirmado: 'confirmado', pago: 'pago', enviado: 'saiu para entrega', retirar: 'pronto para retirada', entregue: 'finalizado', cancelado: 'cancelado' };
+  var RETURN_STATUS = { solicitada: ['Devolução solicitada', 'warn'], aprovada: ['Devolução aprovada', 'ok'], recusada: ['Devolução recusada', 'err'], concluida: ['Devolvido', 'neutral'] };
   var CATS = window.JM_CATEGORIES || [];
   var PAYMENTS = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Fiado'];
   var app = document.getElementById('app');
@@ -186,6 +187,8 @@
           snap.docChanges().forEach(function (ch) {
             var o = ch.doc.data();
             if (ch.type === 'added' && o.status === 'novo') toast('🛍️ Novo pedido #' + o.code + ' de ' + o.customer.name + '!');
+            var before = ch.type === 'modified' && db.orders.find(function (x) { return x.id === ch.doc.id; });
+            if (before && !before['return'] && o['return']) toast('↩️ ' + o.customer.name + ' pediu devolução do pedido #' + o.code + '.');
           });
         }
         if (modal.open) { deferred[col] = snap; return; }
@@ -393,7 +396,27 @@
         }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum cliente cadastrado ainda.</p>');
   }
 
-  function newOrders() { return (db.orders || []).filter(function (o) { return o.status === 'novo'; }); }
+  function newOrders() { return (db.orders || []).filter(function (o) { return o.status === 'novo' || (o['return'] && o['return'].status === 'solicitada'); }); }
+  function orderOfSale(saleId) { return (db.orders || []).find(function (o) { return o.saleId === saleId; }); }
+
+  // Finaliza o pedido: lança a venda (se ainda não foi), marca como paga e registra a data.
+  function finishOrder(o) {
+    if (!o.saleId) orderToSale(o);
+    var sale = db.sales.find(function (x) { return x.id === o.saleId; });
+    if (sale) sale.status = 'pago';
+    o.status = 'entregue';
+    o.finishedAt = firebase.firestore.Timestamp.now();
+  }
+
+  // Devolução concluída: desfaz a venda (os produtos voltam ao estoque).
+  function undoSale(o) {
+    var sale = o.saleId && db.sales.find(function (x) { return x.id === o.saleId; });
+    if (sale) {
+      sale.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock += i.qty; });
+      db.sales = db.sales.filter(function (x) { return x !== sale; });
+    }
+    delete o.saleId;
+  }
   function orderMillis(o) { return o.createdAt && o.createdAt.toMillis ? o.createdAt.toMillis() : 0; }
   function orderWhen(o) {
     if (!o.createdAt || !o.createdAt.toDate) return '—';
@@ -409,14 +432,16 @@
   function viewPedidos() {
     var f = filters.pedidos;
     var list = (db.orders || []).filter(function (o) {
-      if (f.status === 'abertos') return o.status !== 'entregue' && o.status !== 'cancelado';
+      var r = o['return'];
+      if (f.status === 'abertos') return (o.status !== 'entregue' && o.status !== 'cancelado') || (r && (r.status === 'solicitada' || r.status === 'aprovada'));
+      if (f.status === 'devolucoes') return !!r;
       return !f.status || o.status === f.status;
     }).sort(function (a, b) { return orderMillis(b) - orderMillis(a); });
     return '' +
       '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
       (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '') +
       '<div class="toolbar"><select data-filter="pedidos.status" aria-label="Status">' +
-        opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) +
+        opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) + opt('devolucoes', 'Devoluções', f.status) +
         ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
         '<span class="count">' + list.length + ' pedido(s)</span></div>' +
       (list.length ? '<div class="orders">' + list.map(function (o) {
@@ -434,11 +459,24 @@
           '<p class="order__meta">' + (o.delivery.type === 'pickup' ? '🏬 Retirada na loja' : '🚚 ' + esc(o.delivery.address) + ' · frete ' + brl(o.delivery.fee)) +
             ' · 💳 ' + esc(o.payment) + (o.coupon ? ' · 🏷️ ' + esc(o.coupon.code) + ' (−' + brl(o.coupon.discount) + ')' : '') +
             (o.notes ? '<br>📝 ' + esc(o.notes) : '') + '</p>' +
+          returnBox(o) +
           '<footer><label>Status <select data-order-status="' + o.id + '">' + ORDER_STATUS.map(function (s) { return opt(s[0], s[1], o.status); }).join('') + '</select></label>' +
             (o.saleId ? '<span class="muted">✓ Venda lançada</span>' : '<button class="btn btn--sm" data-action="order-to-sale" data-id="' + o.id + '">Lançar venda e baixar estoque</button>') +
             (wa ? '<a class="btn btn--ghost btn--sm" href="' + wa + '" target="_blank" rel="noopener">Avisar cliente no WhatsApp</a>' : '') +
           '</footer></article>';
       }).join('') + '</div>' : '<p class="empty">Nenhum pedido aqui.</p>');
+  }
+
+  function returnBox(o) {
+    var r = o['return'];
+    if (!r) return '';
+    var st = RETURN_STATUS[r.status] || [r.status, 'warn'];
+    var btn = function (act, label, cls) { return '<button class="btn btn--sm ' + (cls || '') + '" data-action="' + act + '" data-id="' + o.id + '">' + label + '</button>'; };
+    return '<div class="return return--' + st[1] + '"><p><b>↩️ ' + st[0] + '</b> · motivo: ' + esc(r.reason) + (r.details ? ' — “' + esc(r.details) + '”' : '') + '</p>' +
+      (r.note ? '<p class="muted">Resposta da loja: ' + esc(r.note) + '</p>' : '') +
+      (r.status === 'solicitada' ? '<div class="return__btns">' + btn('return-approve', 'Aprovar devolução') + btn('return-refuse', 'Recusar', 'btn--danger') + '</div>' : '') +
+      (r.status === 'aprovada' ? '<div class="return__btns">' + btn('return-done', 'Produto recebido e reembolso feito') + '</div>' : '') +
+      '</div>';
   }
 
   // Transforma um pedido do site em venda: cadastra/acha o cliente e dá baixa no estoque.
@@ -763,13 +801,20 @@
     'edit-sale': function (id) { saleForm(db.sales.find(function (s) { return s.id === id; })); },
     'mark-paid': function (id) {
       db.sales.find(function (s) { return s.id === id; }).status = 'pago';
-      save(); render(); toast('Venda marcada como paga.');
+      // Venda que veio de um pedido do site: o cliente passa a ver a compra como paga/finalizada.
+      var o = orderOfSale(id);
+      if (o && o.status !== 'entregue' && o.status !== 'cancelado') {
+        if (['enviado', 'retirar'].indexOf(o.status) !== -1) finishOrder(o); else o.status = 'pago';
+      }
+      save(); render(); toast(o ? 'Venda paga. O cliente já vê o pedido #' + o.code + ' atualizado.' : 'Venda marcada como paga.');
     },
     'delete-sale': function (id) {
       var s = db.sales.find(function (s) { return s.id === id; });
       if (!confirm('Excluir esta venda de ' + brl(saleTotal(s)) + '? Os produtos voltam para o estoque.')) return;
       s.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock += i.qty; });
       db.sales = db.sales.filter(function (x) { return x !== s; });
+      var o = orderOfSale(id);
+      if (o) delete o.saleId;
       save(); render(); toast('Venda excluída.');
     },
     'new-product': function () { productForm(null); },
@@ -783,6 +828,27 @@
     },
     'new-customer': function () { customerForm(null); },
     'new-coupon': function () { couponForm(null); },
+    'return-approve': function (id) {
+      var o = db.orders.find(function (o) { return o.id === id; });
+      var note = prompt('Mensagem para o cliente (opcional):', 'Devolução aprovada! Vamos combinar a retirada pelo WhatsApp.');
+      if (note === null) return;
+      o['return'] = Object.assign({}, o['return'], { status: 'aprovada', note: note.trim() });
+      save(); render(); toast('Devolução aprovada. Combine com o cliente pelo WhatsApp.');
+    },
+    'return-refuse': function (id) {
+      var o = db.orders.find(function (o) { return o.id === id; });
+      var note = prompt('Por que a devolução foi recusada? O cliente vai ver esta mensagem.');
+      if (note === null) return;
+      o['return'] = Object.assign({}, o['return'], { status: 'recusada', note: note.trim() });
+      save(); render(); toast('Devolução recusada.');
+    },
+    'return-done': function (id) {
+      var o = db.orders.find(function (o) { return o.id === id; });
+      if (!confirm('Confirmar que o produto voltou e o reembolso foi feito? A venda é desfeita e os produtos voltam ao estoque.')) return;
+      undoSale(o);
+      o['return'] = Object.assign({}, o['return'], { status: 'concluida' });
+      save(); render(); toast('Devolução concluída. Estoque atualizado.');
+    },
     'order-to-sale': function (id) {
       var o = db.orders.find(function (o) { return o.id === id; });
       if (!confirm('Lançar o pedido #' + o.code + ' como venda? O estoque dos produtos vai baixar.')) return;
@@ -844,7 +910,12 @@
     var oid = e.target.dataset.orderStatus;
     if (oid) {
       var o = db.orders.find(function (o) { return o.id === oid; });
-      o.status = e.target.value;
+      if (e.target.value === 'entregue') {
+        if (!o.saleId && !confirm('Finalizar o pedido #' + o.code + '? A venda será lançada como paga e o estoque vai baixar.')) { render(); return; }
+        finishOrder(o);
+      } else {
+        o.status = e.target.value;
+      }
       save(); render(); toast('Pedido #' + o.code + ': ' + e.target.selectedOptions[0].textContent + '.');
       return;
     }
