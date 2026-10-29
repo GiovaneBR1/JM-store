@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Gestão — JM Store</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar__in">
+    <a class="logo" href="#/">JM <span>Store</span> <small>gestão</small></a>
+    <nav class="nav" aria-label="Seções">
+      <a href="#/" data-nav="painel">Painel</a>
+      <a href="#/vendas" data-nav="vendas">Vendas</a>
+      <a href="#/produtos" data-nav="produtos">Produtos</a>
+      <a href="#/clientes" data-nav="clientes">Clientes</a>
+      <a href="#/dados" data-nav="dados">Backup</a>
+    </nav>
+    <a class="bar__shop" href="./" target="_blank" rel="noopener">Ver loja ↗</a>
+  </div>
+</header>
+
+<main id="app" class="wrap" tabindex="-1"></main>
+
+<dialog id="modal" class="modal">
+  <form method="dialog" id="modal-form" class="modal__box"></form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/products.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
