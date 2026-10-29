@@ -31,14 +31,17 @@ Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o me
 
 - **Painel:** vendido hoje e no mês, lucro, valores a receber, mais vendidos e produtos para repor.
 - **Vendas:** registre cada venda (itens, cliente, forma de pagamento, desconto, pago ou a receber). O estoque baixa sozinho; excluir a venda devolve os produtos.
-- **Produtos:** cadastro com custo, preço, margem e estoque, além de entrada de mercadoria.
+- **Produtos:** cadastro com foto, custo, preço, preço promocional, descrições, destaque e estoque, além de entrada de mercadoria. Tudo o que você salva aparece na loja na hora: foto, preço e estoque (o custo nunca é mostrado).
+- **Cupons:** crie códigos de desconto em porcentagem ou valor fixo, com pedido mínimo opcional. Dá para pausar e reativar.
 - **Clientes:** contato com link para o WhatsApp, total gasto e quanto cada um deve.
 - **Backup:** com o login ativo, os dados ficam na nuvem e aparecem em qualquer aparelho do admin, atualizando ao vivo. Na primeira vez, se houver dados salvos no navegador, o painel oferece enviá-los para a nuvem. Mesmo assim, baixe um backup de vez em quando.
 
 ## Como editar
 
 - **WhatsApp, PIX, endereço de retirada e frete por bairro:** `js/config.js`
-- **Produtos e categorias:** `js/products.js`. Para colocar foto, salve a imagem na pasta `img/` e preencha `image: 'img/nome-da-foto.webp'` no produto.
+- **Produtos:** pela gestão (aba Produtos). O arquivo `js/products.js` é só o catálogo inicial, usado quando a nuvem ainda está vazia.
+- **Categorias:** `js/products.js` (`JM_CATEGORIES`).
+- **Regras do Firestore:** sempre que `firestore.rules` mudar, cole o conteúdo de novo no console (Firestore → Regras → Publicar).
 
 Depois de editar, faça commit e push; o GitHub Pages atualiza o site em 1 a 2 minutos.
 

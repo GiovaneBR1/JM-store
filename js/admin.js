@@ -7,7 +7,7 @@
   var KEY = 'jm-admin-v1';
   var AUTH = window.JMAuth;
   var cloud = !!(AUTH && AUTH.enabled);
-  var COLS = ['products', 'customers', 'sales'];
+  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog'];
   var CATS = window.JM_CATEGORIES || [];
   var PAYMENTS = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Fiado'];
   var app = document.getElementById('app');
@@ -41,14 +41,50 @@
   }
 
   // ---------- dados ----------
+  var SAMPLE = window.JM_PRODUCTS || [];
   function seed() {
     return {
-      products: (window.JM_PRODUCTS || []).map(function (p) {
-        var price = p.promoPrice != null ? p.promoPrice : p.price;
-        return { id: p.id, name: p.name, category: p.category, cost: 0, price: price, stock: p.stock, minStock: 3 };
+      products: SAMPLE.map(function (p) {
+        return enrich({ id: p.id, name: p.name, category: p.category, cost: 0, price: p.price, promoPrice: p.promoPrice != null ? p.promoPrice : null, stock: p.stock, minStock: 3 });
       }),
       customers: [],
-      sales: []
+      sales: [],
+      coupons: []
+    };
+  }
+
+  function slugify(s) {
+    return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'produto';
+  }
+  function uniqueSlug(name, selfId) {
+    var base = slugify(name), slug = base, n = 2;
+    while (db.products.some(function (p) { return p.slug === slug && p.id !== selfId; })) slug = base + '-' + n++;
+    return slug;
+  }
+
+  // Completa produtos antigos com os campos que a vitrine usa (descrição, desenho, opções…).
+  function enrich(p) {
+    var src = SAMPLE.find(function (x) { return x.id === p.id; }) || {};
+    if (!p.slug) p.slug = src.slug || slugify(p.name);
+    if (p.short == null) p.short = src.short || '';
+    if (p.description == null) p.description = src.description || '';
+    if (p.featured == null) p.featured = !!src.featured;
+    if (p.image == null) p.image = src.image || '';
+    if (p.promoPrice === undefined) p.promoPrice = null;
+    if (p.specs === undefined) p.specs = src.specs || null;
+    if (p.variants === undefined) p.variants = src.variants || null;
+    if (!p.art) p.art = src.art || { perfumes: 'perfume', maquiagem: 'batom', skincare: 'pote' }[p.category] || 'perfume';
+    if (!p.tone) p.tone = src.tone || '#BB6499';
+    return p;
+  }
+  function sellPrice(p) { return p.promoPrice != null && p.promoPrice > 0 ? p.promoPrice : p.price; }
+
+  // O que a vitrine pode ver de cada produto (sem custo e estoque mínimo).
+  function publicProduct(p) {
+    return {
+      id: p.id, name: p.name, slug: p.slug, category: p.category, price: p.price, promoPrice: p.promoPrice != null && p.promoPrice > 0 ? p.promoPrice : null,
+      stock: p.stock, short: p.short || '', description: p.description || '', featured: !!p.featured, image: p.image || '',
+      specs: p.specs || null, variants: p.variants || null, art: p.art, tone: p.tone
     };
   }
 
@@ -56,7 +92,9 @@
   function loadLocal() {
     var data;
     try { data = JSON.parse(localStorage.getItem(KEY)); } catch (e) { data = null; }
-    return data && Array.isArray(data.products) ? data : null;
+    if (!data || !Array.isArray(data.products)) return null;
+    data.coupons = data.coupons || [];
+    return data;
   }
 
   // JSON com as chaves em ordem, para comparar com o que já está na nuvem.
@@ -68,7 +106,11 @@
     }
     return JSON.stringify(v);
   }
-  function fields(item) { var o = Object.assign({}, item); delete o.id; return o; }
+  function fields(item) {
+    var o = {};
+    Object.keys(item).forEach(function (k) { if (k !== 'id' && item[k] !== undefined) o[k] = item[k]; });
+    return o;
+  }
 
   var synced = {};   // coleção → id → JSON salvo na nuvem
   var deferred = {}; // atualizações vindas de outro aparelho enquanto um formulário está aberto
@@ -82,6 +124,7 @@
       return;
     }
     var fs = AUTH.firestore(), ops = [];
+    db.catalog = db.products.map(publicProduct);
     COLS.forEach(function (col) {
       var seen = {};
       db[col].forEach(function (item) {
@@ -119,7 +162,7 @@
   function startCloud() {
     stopCloud();
     app.innerHTML = '<p class="empty">Carregando os dados da loja…</p>';
-    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [] };
+    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [] };
     COLS.forEach(function (col) {
       unsubs.push(fs.collection(col).onSnapshot(function (snap) {
         if (!loaded[col]) {
@@ -142,17 +185,18 @@
   }
 
   function firstLoad() {
-    var empty = COLS.every(function (c) { return !db[c].length; });
+    var empty = !db.products.length && !db.customers.length && !db.sales.length;
     if (empty) {
       var local = loadLocal();
       if (local && confirm('Encontramos dados da gestão salvos neste navegador (' + local.sales.length + ' venda(s), ' +
           local.customers.length + ' cliente(s)). Enviar para a nuvem?')) {
-        db = { products: local.products, customers: local.customers, sales: local.sales };
+        db = { products: local.products, customers: local.customers, sales: local.sales, coupons: local.coupons, catalog: db.catalog };
       } else {
-        db = seed();
+        db = Object.assign(seed(), { catalog: db.catalog });
       }
-      save();
     }
+    db.products.forEach(enrich);
+    save(); // também mantém o catálogo público da vitrine em dia
     document.body.classList.remove('locked');
     render();
   }
@@ -288,13 +332,15 @@
           CATS.map(function (c) { return opt(c.slug, c.name, f.cat); }).join('') + '</select>' +
         '<span class="count">' + list.length + ' produto(s)</span>' +
       '</div>' +
-      (list.length ? '<div class="table-wrap"><table><thead><tr><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th>' +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th></th><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th>' +
         '<th class="num">Margem</th><th class="num">Estoque</th><th></th></tr></thead><tbody>' +
         list.map(function (p) {
-          var margin = p.cost > 0 && p.price > 0 ? Math.round((p.price - p.cost) / p.price * 100) + '%' : '<span class="muted">—</span>';
-          return '<tr><td>' + esc(p.name) + '<span class="sub">' + esc(catName(p.category)) + '</span></td>' +
+          var price = sellPrice(p);
+          var margin = p.cost > 0 && price > 0 ? Math.round((price - p.cost) / price * 100) + '%' : '<span class="muted">—</span>';
+          return '<tr><td class="thumb">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span aria-hidden="true">📷</span>') + '</td>' +
+            '<td>' + esc(p.name) + (p.featured ? ' <span class="pill pill--neutral">Destaque</span>' : '') + '<span class="sub">' + esc(catName(p.category)) + '</span></td>' +
             '<td class="num">' + (p.cost ? brl(p.cost) : '<span class="muted">—</span>') + '</td>' +
-            '<td class="num">' + brl(p.price) + '</td><td class="num">' + margin + '</td>' +
+            '<td class="num">' + (price !== p.price ? '<s class="muted">' + brl(p.price) + '</s><br>' : '') + brl(price) + '</td><td class="num">' + margin + '</td>' +
             '<td class="num">' + stockPill(p) + '</td>' +
             '<td class="row-actions"><button class="link" data-action="restock" data-id="' + p.id + '">+ Entrada</button>' +
             '<button class="link" data-action="edit-product" data-id="' + p.id + '">Editar</button>' +
@@ -330,6 +376,24 @@
         }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum cliente cadastrado ainda.</p>');
   }
 
+  function couponLabel(c) { return c.type === 'percent' ? c.value + '%' : brl(c.value); }
+  function viewCupons() {
+    var list = db.coupons.slice().sort(function (a, b) { return a.code.localeCompare(b.code); });
+    return '' +
+      '<div class="head"><div><h1>Cupons de desconto</h1><p class="muted">O cliente digita o código ao finalizar o pedido na loja.</p></div>' +
+      '<div class="actions"><button class="btn" data-action="new-coupon">+ Novo cupom</button></div></div>' +
+      (!cloud ? '<p class="notice">Os cupons só funcionam na loja com o login ativado.</p>' : '') +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th>Código</th><th class="num">Desconto</th><th class="num">Pedido mínimo</th><th>Status</th><th></th></tr></thead><tbody>' +
+        list.map(function (c) {
+          return '<tr><td><b>' + esc(c.code) + '</b></td><td class="num">' + couponLabel(c) + '</td>' +
+            '<td class="num">' + (c.minOrder ? brl(c.minOrder) : '<span class="muted">—</span>') + '</td>' +
+            '<td>' + (c.active ? '<span class="pill pill--ok">Ativo</span>' : '<span class="pill pill--neutral">Pausado</span>') + '</td>' +
+            '<td class="row-actions"><button class="link" data-action="toggle-coupon" data-id="' + esc(c.id) + '">' + (c.active ? 'Pausar' : 'Ativar') + '</button>' +
+            '<button class="link" data-action="edit-coupon" data-id="' + esc(c.id) + '">Editar</button>' +
+            '<button class="link link--danger" data-action="delete-coupon" data-id="' + esc(c.id) + '">Excluir</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum cupom criado ainda.</p>');
+  }
+
   function viewDados() {
     return '' +
       '<div class="head"><div><h1>Backup dos dados</h1><p class="muted">' + (cloud
@@ -350,7 +414,7 @@
   }
 
   // ---------- roteamento ----------
-  var ROUTES = { '': ['painel', viewPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], clientes: ['clientes', viewClientes], dados: ['dados', viewDados] };
+  var ROUTES = { '': ['painel', viewPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], clientes: ['clientes', viewClientes], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
   function route() { return location.hash.replace(/^#\/?/, ''); }
   function render() {
     if (!db) return;
@@ -383,24 +447,101 @@
   }
   var money = 'type="number" step="0.01" min="0" inputmode="decimal"';
 
+  // Reduz a foto (no máximo 900 px) para caber no banco de dados sem pesar na vitrine.
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, 900 / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        var ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        var q = 0.82, type = c.toDataURL('image/webp').indexOf('data:image/webp') === 0 ? 'image/webp' : 'image/jpeg';
+        var data = c.toDataURL(type, q);
+        while (data.length > 300000 && q > 0.4) { q -= 0.1; data = c.toDataURL(type, q); }
+        resolve(data);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(); };
+      img.src = url;
+    });
+  }
+
   function productForm(p) {
     var isNew = !p;
-    p = p || { name: '', category: CATS[0] ? CATS[0].slug : '', cost: '', price: '', stock: 0, minStock: 3 };
+    p = p || { name: '', category: CATS[0] ? CATS[0].slug : '', cost: '', price: '', promoPrice: null, stock: 0, minStock: 3, short: '', description: '', featured: false, image: '' };
     openModal('<h2>' + (isNew ? 'Novo produto' : 'Editar produto') + '</h2><div class="fields">' +
       field('Nome', 'name', p.name, 'required', true) +
+      '<div class="field field--full"><span>Foto</span><div class="photo">' +
+        '<div class="photo__img" id="photo-prev">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span>Sem foto</span>') + '</div>' +
+        '<div class="photo__btns"><label class="btn btn--ghost btn--sm">Escolher foto<input type="file" accept="image/*" id="photo-file" hidden></label>' +
+        '<button type="button" class="link link--danger" id="photo-rm"' + (p.image ? '' : ' hidden') + '>Remover foto</button>' +
+        '<small>Foto quadrada ou em pé fica melhor. Ela é reduzida automaticamente.</small></div></div>' +
+        '<input type="hidden" name="image" value="' + esc(p.image || '') + '"></div>' +
       '<label class="field"><span>Categoria</span><select name="category">' +
         CATS.map(function (c) { return opt(c.slug, c.name, p.category); }).join('') + '</select></label>' +
       field('Estoque atual', 'stock', p.stock, 'type="number" step="1" required') +
       field('Custo (R$)', 'cost', p.cost, money + ' placeholder="Quanto você pagou"') +
-      field('Preço de venda (R$)', 'price', p.price, money + ' required') +
       field('Avisar quando chegar em', 'minStock', p.minStock, 'type="number" step="1" min="0"') +
+      field('Preço de venda (R$)', 'price', p.price, money + ' required') +
+      field('Preço promocional (R$)', 'promoPrice', p.promoPrice || '', money + ' placeholder="Deixe vazio se não tiver"') +
+      field('Descrição curta', 'short', p.short || '', 'maxlength="90" placeholder="Aparece no card da vitrine"', true) +
+      '<label class="field field--full"><span>Descrição completa</span><textarea name="description" placeholder="Notas, como usar, volume…">' + esc(p.description || '') + '</textarea></label>' +
+      '<label class="check field--full"><input type="checkbox" name="featured"' + (p.featured ? ' checked' : '') + '> Mostrar entre os destaques da vitrine</label>' +
       '</div>' + foot('Salvar'), function (fd) {
+      var promo = num(fd.get('promoPrice')), price = num(fd.get('price'));
+      if (promo && promo >= price) { toast('O preço promocional precisa ser menor que o preço de venda.'); return false; }
       var data = {
         name: fd.get('name').trim(), category: fd.get('category'), cost: num(fd.get('cost')),
-        price: num(fd.get('price')), stock: parseInt(fd.get('stock'), 10) || 0, minStock: parseInt(fd.get('minStock'), 10) || 0
+        price: price, promoPrice: promo > 0 ? promo : null,
+        stock: parseInt(fd.get('stock'), 10) || 0, minStock: parseInt(fd.get('minStock'), 10) || 0,
+        short: fd.get('short').trim(), description: fd.get('description').trim(), featured: fd.get('featured') === 'on', image: fd.get('image')
       };
-      if (isNew) db.products.push(Object.assign({ id: uid('p') }, data)); else Object.assign(p, data);
+      if (isNew) {
+        var id = uid('p');
+        db.products.push(enrich(Object.assign({ id: id, slug: uniqueSlug(data.name, id) }, data)));
+      } else {
+        Object.assign(p, data);
+      }
       toast(isNew ? 'Produto cadastrado.' : 'Produto atualizado.');
+    });
+
+    var hidden = $('[name=image]', modalForm), prev = $('#photo-prev', modalForm), rm = $('#photo-rm', modalForm);
+    $('#photo-file', modalForm).addEventListener('change', function (e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      prev.innerHTML = '<span>Carregando…</span>';
+      compressImage(file).then(function (data) {
+        hidden.value = data;
+        prev.innerHTML = '<img src="' + data + '" alt="">';
+        rm.hidden = false;
+      }, function () {
+        prev.innerHTML = hidden.value ? '<img src="' + esc(hidden.value) + '" alt="">' : '<span>Sem foto</span>';
+        toast('Não foi possível abrir essa imagem.');
+      });
+    });
+    rm.addEventListener('click', function () { hidden.value = ''; prev.innerHTML = '<span>Sem foto</span>'; rm.hidden = true; });
+  }
+
+  function couponForm(c) {
+    var isNew = !c;
+    c = c || { code: '', type: 'percent', value: '', minOrder: '', active: true };
+    openModal('<h2>' + (isNew ? 'Novo cupom' : 'Editar cupom') + '</h2><div class="fields">' +
+      field('Código', 'code', c.code, 'required pattern="[A-Za-z0-9]{3,20}" maxlength="20" style="text-transform:uppercase" placeholder="Ex.: BEMVINDA10"', true) +
+      '<label class="field"><span>Tipo de desconto</span><select name="type">' + opt('percent', 'Porcentagem (%)', c.type) + opt('fixed', 'Valor fixo (R$)', c.type) + '</select></label>' +
+      field('Desconto', 'value', c.value, money + ' required') +
+      field('Pedido mínimo (R$)', 'minOrder', c.minOrder || '', money + ' placeholder="Opcional"') +
+      '<label class="check"><input type="checkbox" name="active"' + (c.active ? ' checked' : '') + '> Cupom ativo</label>' +
+      '</div><p class="muted" style="font-size:.88rem">Só letras e números, de 3 a 20 caracteres. O cliente digita o código no fechamento do pedido.</p>' + foot('Salvar'), function (fd) {
+      var code = fd.get('code').trim().toUpperCase(), type = fd.get('type'), value = num(fd.get('value'));
+      if (!/^[A-Z0-9]{3,20}$/.test(code)) { toast('Use só letras e números no código (3 a 20).'); return false; }
+      if (value <= 0 || (type === 'percent' && value > 100)) { toast('Confira o valor do desconto.'); return false; }
+      if (db.coupons.some(function (x) { return x.id === code && x !== c; })) { toast('Já existe um cupom com esse código.'); return false; }
+      var data = { id: code, code: code, type: type, value: value, minOrder: num(fd.get('minOrder')), active: fd.get('active') === 'on' };
+      if (isNew) db.coupons.push(data); else Object.assign(c, data);
+      toast(isNew ? 'Cupom ' + code + ' criado.' : 'Cupom atualizado.');
     });
   }
 
@@ -497,7 +638,7 @@
     modalForm.onchange = function (e) {
       if (e.target.name === 'productId') {
         var p = product(e.target.value);
-        if (p) $('[name=price]', e.target.parentNode).value = p.price;
+        if (p) $('[name=price]', e.target.parentNode).value = sellPrice(p);
       }
       if (e.target.name === 'customerId' && e.target.value === '__new') {
         var current = readDraft();
@@ -549,6 +690,18 @@
       save(); render(); toast('Produto excluído.');
     },
     'new-customer': function () { customerForm(null); },
+    'new-coupon': function () { couponForm(null); },
+    'edit-coupon': function (id) { couponForm(db.coupons.find(function (c) { return c.id === id; })); },
+    'toggle-coupon': function (id) {
+      var c = db.coupons.find(function (c) { return c.id === id; });
+      c.active = !c.active;
+      save(); render(); toast('Cupom ' + c.code + (c.active ? ' ativado.' : ' pausado.'));
+    },
+    'delete-coupon': function (id) {
+      if (!confirm('Excluir o cupom ' + id + '?')) return;
+      db.coupons = db.coupons.filter(function (c) { return c.id !== id; });
+      save(); render(); toast('Cupom excluído.');
+    },
     'edit-customer': function (id) { customerForm(customer(id)); },
     'delete-customer': function (id) {
       var c = customer(id);
@@ -558,7 +711,8 @@
       save(); render(); toast('Cliente excluído.');
     },
     export: function () {
-      var blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+      var data = { products: db.products, customers: db.customers, sales: db.sales, coupons: db.coupons };
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'jm-store-backup-' + today() + '.json';
@@ -567,7 +721,7 @@
     },
     reset: function () {
       if (!confirm('Apagar todas as vendas, clientes e alterações de produtos?')) return;
-      db = seed(); save(); render(); toast('Dados reiniciados.');
+      db = Object.assign(seed(), { catalog: db.catalog || [] }); save(); render(); toast('Dados reiniciados.');
     }
   };
 
@@ -596,7 +750,9 @@
         var data = JSON.parse(reader.result);
         if (!Array.isArray(data.products) || !Array.isArray(data.sales) || !Array.isArray(data.customers)) throw new Error();
         if (!confirm('Substituir os dados atuais por este backup?')) return;
-        db = data; save(); render(); toast('Backup importado.');
+        data.coupons = data.coupons || [];
+        data.products.forEach(enrich);
+        db = Object.assign(data, { catalog: db.catalog || [] }); save(); render(); toast('Backup importado.');
       } catch (err) { toast('Arquivo de backup inválido.'); }
     };
     reader.readAsText(e.target.files[0]);
@@ -605,6 +761,7 @@
   window.addEventListener('hashchange', function () { render(); app.focus(); });
   if (!cloud) {
     db = loadLocal() || seed();
+    db.products.forEach(enrich);
     render();
   } else {
     gate('<p>Carregando…</p>');
