@@ -44,7 +44,7 @@ Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o me
 - **Categorias:** `js/products.js` (`JM_CATEGORIES`).
 - **Regras do Firestore:** sempre que `firestore.rules` mudar, cole o conteúdo de novo no console (Firestore → Regras → Publicar).
 
-Depois de editar, faça commit e push; o GitHub Pages atualiza o site em 1 a 2 minutos.
+Depois de editar, faça commit e push; o GitHub Pages atualiza o site em 1 a 2 minutos. Se mudar algum arquivo de `css/` ou `js/`, troque também o `?v=...` nos links de `index.html` e `admin.html` (por exemplo, para a data do dia), para que os navegadores baixem a versão nova na hora.
 
 ## Testar no computador
 
