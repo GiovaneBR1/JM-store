@@ -6,6 +6,8 @@
   var CATS = window.JM_CATEGORIES;
   var app = document.getElementById('app');
   var DARK = '#6E412A';
+  var AUTH = window.JMAuth;
+  var LOGIN_MSG = 'Entre na sua conta para colocar produtos na sacola e finalizar o pedido.';
 
   // ---------- helpers ----------
   function $(sel, el) { return (el || document).querySelector(sel); }
@@ -376,7 +378,7 @@
     });
     $('#buy').addEventListener('submit', function (e) {
       e.preventDefault();
-      if (add(p.id, v, qty)) openDrawer();
+      AUTH.require(LOGIN_MSG, function () { if (add(p.id, v, qty)) openDrawer(); });
     });
   }
 
@@ -391,6 +393,12 @@
     if (!cart.length) {
       app.innerHTML = '<div class="wrap done"><h1>Sua sacola está vazia</h1><p>Adicione produtos para finalizar um pedido.</p>' +
         '<div class="btns" style="margin-top:1.5rem"><a class="btn btn--main" href="#/">Ver produtos</a></div></div>';
+      return;
+    }
+    if (AUTH.enabled && !AUTH.user) {
+      app.innerHTML = '<div class="wrap done"><h1>Entre para finalizar</h1><p>Seus produtos continuam na sacola. Entre ou crie sua conta para enviar o pedido.</p>' +
+        '<div class="btns" style="margin-top:1.5rem"><button type="button" class="btn btn--main" data-acct="login">Entrar ou criar conta</button>' +
+        '<a class="btn btn--ghost" href="#/">Continuar comprando</a></div></div>';
       return;
     }
     var zones = C.shippingZones.map(function (z) {
@@ -435,6 +443,7 @@
       '</aside></div></div>';
 
     var form = $('#co');
+    if (AUTH.user && AUTH.user.name) form.fullname.value = AUTH.user.name;
     var zoneOf = function () { return C.shippingZones.find(function (z) { return z.id === form.zone.value; }); };
     var isPickup = function () { return form.delivery.value === 'pickup'; };
     var fee = function () { if (isPickup()) return 0; var z = zoneOf(); return z ? z.fee : null; };
@@ -552,7 +561,7 @@
     }
     if (t.dataset.add) {
       var p = byId(t.dataset.add);
-      if (add(p.id, '', 1)) toast(p.name + ' foi para a sacola.');
+      AUTH.require(LOGIN_MSG, function () { if (add(p.id, '', 1)) toast(p.name + ' foi para a sacola.'); });
       return;
     }
     var i;
@@ -580,4 +589,12 @@
   window.addEventListener('hashchange', route);
   save();
   route();
+
+  var wasLogged = !!AUTH.user;
+  AUTH.onChange(function (s) {
+    // Ao sair da conta, a sacola é esvaziada (útil em aparelho compartilhado).
+    if (wasLogged && !s.user) { cart = []; save(); }
+    wasLogged = !!s.user;
+    if (location.hash === '#/checkout') route();
+  });
 })();
