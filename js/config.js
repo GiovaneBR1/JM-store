@@ -3,7 +3,7 @@ window.JM_CONFIG = {
   storeName: 'JM Store',
 
   // Número do WhatsApp que recebe os pedidos: 55 + DDD + número, só dígitos.
-  whatsapp: '5500000000000',
+  whatsapp: '5542998692070',
 
   // Chave PIX mostrada no fim do pedido.
   pixKey: 'sua-chave-pix@email.com',
