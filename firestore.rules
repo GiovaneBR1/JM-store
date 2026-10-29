@@ -21,5 +21,18 @@ service cloud.firestore {
     match /products/{id} { allow read, write: if isAdmin(); }
     match /customers/{id} { allow read, write: if isAdmin(); }
     match /sales/{id} { allow read, write: if isAdmin(); }
+
+    // Vitrine: cópia pública dos produtos (sem o custo), mantida pela gestão.
+    match /catalog/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Cupons: o cliente só consegue conferir um código que já sabe (o ID do documento);
+    // listar todos os cupons e editá-los é só para admin.
+    match /coupons/{code} {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
   }
 }

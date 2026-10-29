@@ -156,6 +156,15 @@ main:focus { outline: none; }
 .qty output { min-width: 2rem; text-align: center; font-weight: 500; }
 .buy__row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .buy__row .btn { flex: 1; min-width: 12rem; }
+.buy__help { margin-top: 1rem; font-size: .95rem; color: var(--brown-2); }
+.coupon { margin-top: 1.25rem; display: grid; gap: .4rem; }
+.coupon label { font-weight: 500; font-size: .95rem; }
+.coupon__row { display: flex; gap: .5rem; }
+.coupon__row input { flex: 1; min-width: 0; border: 1px solid var(--rosa); background: #fff; border-radius: var(--r-md); padding: .6rem .8rem; text-transform: uppercase; }
+.coupon__row input:disabled { background: var(--pastel-soft); }
+.coupon__row .btn { padding: .6rem 1.1rem; }
+.coupon__msg { font-size: .88rem; min-height: 1.2em; }
+.coupon__msg--ok { color: var(--ok); } .coupon__msg--err { color: var(--err); }
 .pdp__desc { margin-top: 2.25rem; border-top: 1px solid var(--pastel); padding-top: 1.5rem; }
 .pdp__desc h2 { font-size: 1.5rem; margin-bottom: .5rem; }
 .specs { margin: 1.25rem 0 0; display: grid; grid-template-columns: auto 1fr; gap: .45rem 1.5rem; font-size: .95rem; }

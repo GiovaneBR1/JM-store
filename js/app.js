@@ -2,7 +2,7 @@
   'use strict';
 
   var C = window.JM_CONFIG;
-  var P = window.JM_PRODUCTS;
+  var P = window.JM_PRODUCTS; // trocado pelo catálogo da nuvem (gestão) quando disponível
   var CATS = window.JM_CATEGORIES;
   var app = document.getElementById('app');
   var DARK = '#6E412A';
@@ -291,7 +291,7 @@
     app.innerHTML =
       '<section class="hero"><div class="wrap hero__in">' +
         '<div class="hero__text"><h1>Perfumes e maquiagem importados, entregues na sua porta.</h1>' +
-        '<p class="hero__lead">A gente traz do Paraguai, confere cada produto e entrega no seu bairro. Você escolhe aqui, confirma pelo WhatsApp e paga no PIX.</p>' +
+        '<p class="hero__lead">Produtos importados e de qualidade, com entrega no seu bairro.</p>' +
         '<div class="hero__cta"><button type="button" class="btn btn--main" data-goto-catalog>Ver produtos</button>' +
         '<a class="btn btn--ghost" href="' + waLink('Olá! Vim pelo site da JM Store.') + '" target="_blank" rel="noopener">Falar no WhatsApp</a></div></div>' +
         '<div class="shelf">' + shelf() + '</div>' +
@@ -302,12 +302,12 @@
         '<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 12 12 21 3 12z"/><path d="M8.5 12h7"/></svg>Pagamento no PIX</li>' +
         '<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8-4.3-4.1 5.9-.8z"/></svg>Produtos originais importados</li>' +
       '</ul></section>' +
-      catalogHtml('Nossos produtos', 'Perfumes, maquiagem e skincare com estoque na loja.') +
+      catalogHtml('Nossos produtos', 'Perfumes, maquiagem e skincare.') +
       '<section class="how" aria-labelledby="how-title"><div class="wrap"><h2 id="how-title">Como comprar</h2><ol>' +
-        '<li><h3>Escolha</h3><p>Coloque os produtos na sacola e escolha cor ou tamanho quando tiver opção.</p></li>' +
-        '<li><h3>Informe a entrega</h3><p>Diga o seu bairro para calcular o frete, ou escolha retirar na loja sem custo.</p></li>' +
-        '<li><h3>Confirme no WhatsApp</h3><p>O pedido chega pronto na nossa conversa. A gente confirma o estoque e o horário.</p></li>' +
-        '<li><h3>Pague e receba</h3><p>Pague no PIX e receba em casa em até 3 dias úteis.</p></li>' +
+        '<li><h3>Escolha</h3><p>Coloque os produtos na sacola.</p></li>' +
+        '<li><h3>Informe a entrega</h3><p>Frete pelo bairro ou retirada grátis.</p></li>' +
+        '<li><h3>Confirme no WhatsApp</h3><p>O pedido chega pronto na nossa conversa.</p></li>' +
+        '<li><h3>Pague e receba</h3><p>PIX e entrega em até 3 dias úteis.</p></li>' +
       '</ol></div></section>';
     bindCatalog();
   }
@@ -350,8 +350,9 @@
         '<div class="field"><span id="qty-l">Quantidade</span><div class="qty" role="group" aria-labelledby="qty-l">' +
           '<button type="button" id="q-dec" aria-label="Diminuir">−</button><output id="q-val">1</output>' +
           '<button type="button" id="q-inc" aria-label="Aumentar">+</button></div></div>' +
-        '<div class="buy__row"><button class="btn btn--main" type="submit">Adicionar à sacola</button>' +
-        '<a class="btn btn--ghost" href="' + waLink('Olá! Tenho uma dúvida sobre: ' + p.name) + '" target="_blank" rel="noopener">Tirar dúvida</a></div>';
+        '<div class="buy__row"><button class="btn btn--main" type="submit" value="now">Comprar agora</button>' +
+        '<button class="btn btn--ghost" type="submit" value="bag">Adicionar à sacola</button></div>';
+    var help = '<p class="buy__help">Dúvidas? <a href="' + waLink('Olá! Tenho uma dúvida sobre: ' + p.name) + '" target="_blank" rel="noopener">Entre em contato conosco</a></p>';
     var specs = Object.keys(p.specs || {}).map(function (k) { return '<dt>' + esc(k) + '</dt><dd>' + esc(p.specs[k]) + '</dd>'; }).join('');
     var related = P.filter(function (x) { return x.category === p.category && x.id !== p.id; }).slice(0, 4);
 
@@ -360,7 +361,7 @@
       '<div class="pdp"><div class="pdp__art">' + art(p) + '</div><div>' +
         '<h1>' + esc(p.name) + '</h1><p class="pdp__short">' + esc(p.short) + '</p>' +
         '<span class="price" id="pdp-price">' + priceHtml(p, v) + '</span>' + stock +
-        '<form class="buy" id="buy">' + buy + '</form>' +
+        '<form class="buy" id="buy">' + buy + '</form>' + help +
         '<div class="pdp__desc"><h2>Sobre o produto</h2><p>' + esc(p.description) + '</p>' +
         (specs ? '<dl class="specs">' + specs + '</dl>' : '') + '</div>' +
       '</div></div></div>' +
@@ -378,7 +379,13 @@
     });
     $('#buy').addEventListener('submit', function (e) {
       e.preventDefault();
-      AUTH.require(LOGIN_MSG, function () { if (add(p.id, v, qty)) openDrawer(); });
+      var now = e.submitter && e.submitter.value === 'now';
+      AUTH.require(LOGIN_MSG, function () {
+        if (now) {
+          // Comprar agora: garante o item na sacola e vai direto para o fechamento.
+          if (add(p.id, v, qty) || inCart(p.id)) location.hash = '#/checkout';
+        } else if (add(p.id, v, qty)) openDrawer();
+      });
     });
   }
 
@@ -436,7 +443,12 @@
       '</form>' +
       '<aside class="summary" aria-labelledby="sum-title"><h2 id="sum-title">Resumo</h2>' +
         cart.map(function (l, i) { return lineHtml(l, i, false); }).join('') +
+        (AUTH.enabled ? '<div class="coupon"><label for="f-coupon">Cupom de desconto</label><div class="coupon__row">' +
+          '<input id="f-coupon" autocomplete="off" maxlength="20" placeholder="Digite o código">' +
+          '<button type="button" class="btn btn--ghost" id="coupon-apply">Aplicar</button></div>' +
+          '<small class="coupon__msg" id="coupon-msg" aria-live="polite"></small></div>' : '') +
         '<div class="totals"><div><span>Subtotal</span><span>' + brl(subtotal()) + '</span></div>' +
+        '<div id="t-disc-row" hidden><span id="t-disc-label">Cupom</span><span id="t-disc"></span></div>' +
         '<div><span>Frete</span><span id="t-ship">Escolha a região</span></div>' +
         '<div class="grand"><span>Total</span><span id="t-total">' + brl(subtotal()) + '</span></div></div>' +
         '<p class="note" style="margin-top:1rem"><a href="#" data-open-bag>Alterar itens</a></p>' +
@@ -447,16 +459,48 @@
     var zoneOf = function () { return C.shippingZones.find(function (z) { return z.id === form.zone.value; }); };
     var isPickup = function () { return form.delivery.value === 'pickup'; };
     var fee = function () { if (isPickup()) return 0; var z = zoneOf(); return z ? z.fee : null; };
+    var coupon = null;
+    var discount = function () {
+      if (!coupon) return 0;
+      var sub = subtotal();
+      return round(Math.min(sub, coupon.type === 'percent' ? sub * coupon.value / 100 : coupon.value));
+    };
     var refresh = function () {
       var pick = isPickup();
       $('#addr').hidden = pick;
       $('#pickup').hidden = !pick;
-      var f = fee();
+      var f = fee(), d = discount();
       $('#t-ship').textContent = pick ? 'Grátis (retirada)' : f == null ? 'Escolha a região' : brl(f);
-      $('#t-total').textContent = brl(subtotal() + (f || 0));
+      $('#t-disc-row').hidden = !d;
+      if (d) { $('#t-disc-label').textContent = 'Cupom ' + coupon.code; $('#t-disc').textContent = '− ' + brl(d); }
+      $('#t-total').textContent = brl(subtotal() - d + (f || 0));
     };
     form.addEventListener('change', refresh);
     refresh();
+
+    var applyBtn = $('#coupon-apply');
+    if (applyBtn) {
+      var codeInput = $('#f-coupon'), msg = $('#coupon-msg');
+      var say = function (text, ok) { msg.textContent = text; msg.className = 'coupon__msg ' + (ok ? 'coupon__msg--ok' : 'coupon__msg--err'); };
+      var apply = function () {
+        if (coupon) { coupon = null; codeInput.disabled = false; codeInput.value = ''; applyBtn.textContent = 'Aplicar'; say('', true); refresh(); codeInput.focus(); return; }
+        var code = codeInput.value.trim().toUpperCase();
+        if (!/^[A-Z0-9]{3,20}$/.test(code)) { say('Digite um código válido.'); return; }
+        applyBtn.disabled = true;
+        AUTH.firestore().collection('coupons').doc(code).get().then(function (d) {
+          applyBtn.disabled = false;
+          var c = d.exists ? d.data() : null;
+          if (!c || !c.active) { say('Cupom inválido ou expirado.'); return; }
+          if (c.minOrder && subtotal() < c.minOrder) { say('Este cupom vale para pedidos a partir de ' + brl(c.minOrder) + '.'); return; }
+          coupon = { code: code, type: c.type, value: c.value };
+          codeInput.value = code; codeInput.disabled = true; applyBtn.textContent = 'Remover';
+          say('Cupom aplicado: ' + (c.type === 'percent' ? c.value + '% de desconto' : brl(c.value) + ' de desconto') + '.', true);
+          refresh();
+        }, function () { applyBtn.disabled = false; say('Não foi possível conferir o cupom agora. Tente de novo.'); });
+      };
+      applyBtn.addEventListener('click', apply);
+      codeInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
+    }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -477,29 +521,46 @@
       }
       if (errs.length) { errs[0].focus(); toast('Confira os campos marcados.'); return; }
 
-      var id = 'JM' + Date.now().toString(36).toUpperCase().slice(-6);
+      var id = 'JM-' + Date.now().toString(36).toUpperCase().slice(-6);
       var ship = fee() || 0;
-      var total = subtotal() + ship;
+      var disc = discount();
+      var total = round(subtotal() - disc + ship);
       var pay = form.pay.value;
       var payText = { pix: 'PIX', whatsapp: 'Combinar pelo WhatsApp', cash_on_delivery: 'Pagar na entrega' }[pay];
       var where = isPickup()
         ? 'Retirar na loja'
         : form.street.value.trim() + ', ' + form.num.value.trim() + (form.comp.value.trim() ? ' — ' + form.comp.value.trim() : '') +
-          ' — ' + form.hood.value.trim() + ' (' + zoneOf().name + ')' + (form.cep.value.trim() ? ' — CEP ' + form.cep.value.trim() : '');
-      var msg = 'Olá! Gostaria de confirmar meu pedido #' + id + ':\n' +
-        cart.map(function (l) {
-          var p = byId(l.id);
-          return '- ' + p.name + (l.v ? ' (' + l.v + ')' : '') + ' x' + l.q + ' = ' + brl(unitPrice(p, l.v) * l.q);
-        }).join('\n') +
-        '\nFrete: ' + (isPickup() ? 'grátis (retirada)' : brl(ship)) +
-        '\nTotal: ' + brl(total) +
-        '\n\nNome: ' + form.fullname.value.trim() +
-        '\nWhatsApp: ' + form.phone.value.trim() +
-        '\nEntrega: ' + where +
-        '\nPagamento: ' + payText +
-        (form.notes.value.trim() ? '\nObs.: ' + form.notes.value.trim() : '') +
-        (pay === 'pix' ? '\n---\nPIX: ' + C.pixKey : '') +
-        '\nObrigado! 💖';
+          ' — ' + form.hood.value.trim() + (form.cep.value.trim() ? ' — CEP ' + form.cep.value.trim() : '');
+      var when = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      var lines = [
+        'Olá, ' + C.storeName + '! Quero finalizar meu pedido 💖',
+        '',
+        '*Pedido #' + id + '*',
+        'Data: ' + when,
+        '',
+        '*Itens*'
+      ].concat(cart.map(function (l) {
+        var p = byId(l.id);
+        return '• ' + l.q + 'x ' + p.name + (l.v ? ' (' + l.v + ')' : '') + ' — ' + brl(unitPrice(p, l.v) * l.q);
+      }), [
+        '',
+        'Subtotal: ' + brl(subtotal()),
+        disc ? 'Cupom ' + coupon.code + ': − ' + brl(disc) : null,
+        'Frete: ' + (isPickup() ? 'grátis (retirada)' : brl(ship) + ' (' + zoneOf().name + ')'),
+        '*Total: ' + brl(total) + '*',
+        '',
+        '*Cliente*',
+        'Nome: ' + form.fullname.value.trim(),
+        'WhatsApp: ' + form.phone.value.trim(),
+        AUTH.user && AUTH.user.email ? 'E-mail: ' + AUTH.user.email : null,
+        '',
+        '*' + (isPickup() ? 'Retirada' : 'Entrega') + '*',
+        isPickup() ? C.pickupAddress : where,
+        '',
+        '*Pagamento:* ' + payText,
+        form.notes.value.trim() ? '*Observações:* ' + form.notes.value.trim() : null
+      ]);
+      var msg = lines.filter(function (x) { return x !== null; }).join('\n');
       var link = waLink(msg);
       window.open(link, '_blank', 'noopener');
 
@@ -586,15 +647,31 @@
   $('#foot-wa').href = waHello;
   $('#foot-pickup').textContent = 'Retirada: ' + C.pickupAddress;
   $('#year').textContent = new Date().getFullYear();
-  window.addEventListener('hashchange', route);
-  save();
-  route();
+  var started = false;
+  function start() {
+    started = true;
+    cart = load();
+    save();
+    window.addEventListener('hashchange', route);
+    route();
+  }
+
+  // Produtos, preços, fotos e estoque vêm da gestão (coleção pública "catalog").
+  // Se a nuvem estiver vazia ou fora do ar, a loja usa o catálogo de js/products.js.
+  if (AUTH.enabled) {
+    app.innerHTML = '<div class="wrap done"><p>Carregando produtos…</p></div>';
+    AUTH.firestore().collection('catalog').get().then(function (snap) {
+      if (!snap.empty) P = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+    }).catch(function () { /* segue com o catálogo local */ }).then(start);
+  } else {
+    start();
+  }
 
   var wasLogged = !!AUTH.user;
   AUTH.onChange(function (s) {
     // Ao sair da conta, a sacola é esvaziada (útil em aparelho compartilhado).
     if (wasLogged && !s.user) { cart = []; save(); }
     wasLogged = !!s.user;
-    if (location.hash === '#/checkout') route();
+    if (started && location.hash === '#/checkout') route();
   });
 })();
