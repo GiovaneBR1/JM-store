@@ -236,6 +236,14 @@ main:focus { outline: none; }
 .order footer { margin-top: .85rem; padding-top: .75rem; border-top: 1px solid var(--pastel-soft); font-size: .92rem; color: var(--brown-2); align-items: baseline; }
 .order footer b { color: var(--brown); font-size: 1.05rem; }
 .order__help { margin-top: .6rem; font-size: .9rem; }
+.ret { margin-top: .85rem; font-size: .93rem; }
+.ret summary { cursor: pointer; color: var(--malva-ink); font-weight: 500; }
+.ret summary small { color: var(--brown-2); font-weight: 400; }
+.ret form { display: grid; gap: .85rem; margin-top: .85rem; padding: 1rem; background: var(--pastel-soft); border-radius: var(--r-md); }
+.ret form .btn { justify-self: start; }
+.ret-box { margin-top: .85rem; padding: .7rem .9rem; border-radius: var(--r-md); display: grid; gap: .2rem; font-size: .92rem; }
+.ret-box span { color: var(--brown-2); }
+.ret-box--warn { background: #F6EEDB; } .ret-box--ok { background: #E9F0E5; } .ret-box--err { background: #F7E4E4; } .ret-box--done { background: var(--pastel-soft); }
 
 /* Footer */
 .foot { background: var(--brown); color: #F6E3EB; }
