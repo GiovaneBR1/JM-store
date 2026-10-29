@@ -28,6 +28,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Pedidos feitos pelo site: o cliente logado cria os seus e acompanha só os dele;
+    // o admin vê todos e muda o status.
+    match /orders/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'novo';
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
     // Cupons: o cliente só consegue conferir um código que já sabe (o ID do documento);
     // listar todos os cupons e editá-los é só para admin.
     match /coupons/{code} {

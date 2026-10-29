@@ -30,6 +30,7 @@ Para dar acesso a outra pessoa, repita o passo 7 com a conta dela. Para tirar o 
 Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o menu da conta → **Painel de gestão**.
 
 - **Painel:** vendido hoje e no mês, lucro, valores a receber, mais vendidos e produtos para repor.
+- **Pedidos:** todo pedido finalizado no site fica salvo aqui, mesmo que o cliente não envie a mensagem do WhatsApp. Um aviso aparece quando chega pedido novo. Mude o status (confirmado, pago, saiu para entrega, entregue…) e o cliente acompanha ao vivo em **Meus pedidos**. O botão "Lançar venda" transforma o pedido em venda e baixa o estoque.
 - **Vendas:** registre cada venda (itens, cliente, forma de pagamento, desconto, pago ou a receber). O estoque baixa sozinho; excluir a venda devolve os produtos.
 - **Produtos:** cadastro com foto, custo, preço, preço promocional, descrições, destaque e estoque, além de entrada de mercadoria. Tudo o que você salva aparece na loja na hora: foto, preço e estoque (o custo nunca é mostrado).
 - **Cupons:** crie códigos de desconto em porcentagem ou valor fixo, com pedido mínimo opcional. Dá para pausar e reativar.

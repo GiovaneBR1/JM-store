@@ -139,6 +139,7 @@
     var first = (state.user.name || state.user.email || '').split(/[ @]/)[0];
     box.innerHTML = '<details class="acct"><summary class="acct__btn">Olá, ' + esc(first) + '</summary>' +
       '<div class="acct__menu"><p><b>' + esc(state.user.name || 'Minha conta') + '</b><small>' + esc(state.user.email || '') + '</small></p>' +
+      '<a href="./#/pedidos">Meus pedidos</a>' +
       (state.isAdmin && !onAdmin ? '<a href="admin.html">Painel de gestão</a>' : '') +
       '<button type="button" data-acct="logout">Sair</button></div></details>';
   }

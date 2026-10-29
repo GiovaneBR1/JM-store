@@ -219,6 +219,24 @@ main:focus { outline: none; }
 .pix code { font-size: 1.05rem; background: var(--pastel-soft); padding: .6rem .8rem; border-radius: var(--r-md); word-break: break-all; }
 .done .btns { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
 
+/* Meus pedidos */
+.orders { max-width: 760px; padding-top: 2rem; padding-bottom: 5rem; }
+.orders h1 { font-size: clamp(2.2rem, 4.5vw, 3.2rem); margin-bottom: 1.5rem; }
+.order { background: #fff; border: 1px solid var(--pastel); border-radius: var(--r-lg); padding: 1.25rem 1.4rem; margin-bottom: 1rem; }
+.order header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.order h2 { font-size: 1.4rem; }
+.order header small { color: var(--brown-2); font-size: .88rem; }
+.order__status { flex: none; font-size: .82rem; font-weight: 500; padding: .25rem .7rem; border-radius: var(--r-full); }
+.order__status--warn { background: #F6EEDB; color: var(--warn); }
+.order__status--ok { background: #E9F0E5; color: var(--ok); }
+.order__status--done { background: var(--pastel-soft); color: var(--brown); }
+.order__status--err { background: #F7E4E4; color: var(--err); }
+.order ul { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .35rem; font-size: .95rem; }
+.order li, .order footer { display: flex; justify-content: space-between; gap: 1rem; }
+.order footer { margin-top: .85rem; padding-top: .75rem; border-top: 1px solid var(--pastel-soft); font-size: .92rem; color: var(--brown-2); align-items: baseline; }
+.order footer b { color: var(--brown); font-size: 1.05rem; }
+.order__help { margin-top: .6rem; font-size: .9rem; }
+
 /* Footer */
 .foot { background: var(--brown); color: #F6E3EB; }
 .foot__in { max-width: var(--w); margin: 0 auto; padding: 3.5rem 1.25rem 2rem; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 2rem; }
