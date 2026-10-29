@@ -1,10 +1,13 @@
 // Gestão da JM Store: produtos/estoque, vendas e clientes.
-// Os dados ficam salvos no navegador (localStorage). Use a aba Backup para
-// exportar um arquivo e levar para outro computador ou celular.
+// Com o Firebase configurado, só contas admin entram e os dados ficam no Firestore
+// (sincronizados entre aparelhos). Sem ele, os dados ficam só no navegador (localStorage).
 (function () {
   'use strict';
 
   var KEY = 'jm-admin-v1';
+  var AUTH = window.JMAuth;
+  var cloud = !!(AUTH && AUTH.enabled);
+  var COLS = ['products', 'customers', 'sales'];
   var CATS = window.JM_CATEGORIES || [];
   var PAYMENTS = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Fiado'];
   var app = document.getElementById('app');
@@ -49,14 +52,122 @@
     };
   }
 
-  var db;
-  function load() {
-    try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) { db = null; }
-    if (!db || !Array.isArray(db.products)) db = seed();
+  var db = null;
+  function loadLocal() {
+    var data;
+    try { data = JSON.parse(localStorage.getItem(KEY)); } catch (e) { data = null; }
+    return data && Array.isArray(data.products) ? data : null;
   }
+
+  // JSON com as chaves em ordem, para comparar com o que já está na nuvem.
+  function stable(v) {
+    if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().filter(function (k) { return k !== 'id' && v[k] !== undefined; })
+        .map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+  function fields(item) { var o = Object.assign({}, item); delete o.id; return o; }
+
+  var synced = {};   // coleção → id → JSON salvo na nuvem
+  var deferred = {}; // atualizações vindas de outro aparelho enquanto um formulário está aberto
+  var unsubs = [];
+
+  // Envia para o Firestore só o que mudou desde a última sincronização.
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(db)); }
-    catch (e) { toast('Não foi possível salvar neste navegador.'); }
+    if (!cloud) {
+      try { localStorage.setItem(KEY, JSON.stringify(db)); }
+      catch (e) { toast('Não foi possível salvar neste navegador.'); }
+      return;
+    }
+    var fs = AUTH.firestore(), ops = [];
+    COLS.forEach(function (col) {
+      var seen = {};
+      db[col].forEach(function (item) {
+        var json = stable(item);
+        seen[item.id] = true;
+        if (synced[col][item.id] !== json) { ops.push({ col: col, id: item.id, data: fields(item) }); synced[col][item.id] = json; }
+      });
+      Object.keys(synced[col]).forEach(function (id) {
+        if (!seen[id]) { ops.push({ col: col, id: id }); delete synced[col][id]; }
+      });
+    });
+    for (var i = 0; i < ops.length; i += 400) {
+      var batch = fs.batch();
+      ops.slice(i, i + 400).forEach(function (op) {
+        var ref = fs.collection(op.col).doc(op.id);
+        if (op.data) batch.set(ref, op.data); else batch.delete(ref);
+      });
+      batch.commit().catch(function (e) {
+        toast(e && e.code === 'permission-denied' ? 'Sem permissão para salvar. Sua conta é admin?' : 'Não foi possível salvar na nuvem. Confira a internet.');
+      });
+    }
+  }
+
+  function applySnap(col, snap) {
+    db[col] = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+    synced[col] = {};
+    db[col].forEach(function (item) { synced[col][item.id] = stable(item); });
+  }
+
+  function stopCloud() {
+    unsubs.forEach(function (u) { u(); });
+    unsubs = []; deferred = {}; db = null;
+  }
+
+  function startCloud() {
+    stopCloud();
+    app.innerHTML = '<p class="empty">Carregando os dados da loja…</p>';
+    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [] };
+    COLS.forEach(function (col) {
+      unsubs.push(fs.collection(col).onSnapshot(function (snap) {
+        if (!loaded[col]) {
+          loaded[col] = true;
+          if (!db) db = fresh;
+          applySnap(col, snap);
+          if (COLS.every(function (c) { return loaded[c]; })) firstLoad();
+          return;
+        }
+        if (modal.open) { deferred[col] = snap; return; }
+        applySnap(col, snap);
+        render();
+      }, function (e) {
+        stopCloud();
+        gate('<h1>Não foi possível abrir</h1><p>' + (e && e.code === 'permission-denied'
+          ? 'O Firestore recusou o acesso. Confira se as regras de firestore.rules foram publicadas.'
+          : 'Confira sua conexão com a internet e recarregue a página.') + '</p>');
+      }));
+    });
+  }
+
+  function firstLoad() {
+    var empty = COLS.every(function (c) { return !db[c].length; });
+    if (empty) {
+      var local = loadLocal();
+      if (local && confirm('Encontramos dados da gestão salvos neste navegador (' + local.sales.length + ' venda(s), ' +
+          local.customers.length + ' cliente(s)). Enviar para a nuvem?')) {
+        db = { products: local.products, customers: local.customers, sales: local.sales };
+      } else {
+        db = seed();
+      }
+      save();
+    }
+    document.body.classList.remove('locked');
+    render();
+  }
+
+  modal.addEventListener('close', function () {
+    var cols = Object.keys(deferred);
+    if (!cols.length || !db) return;
+    cols.forEach(function (col) { applySnap(col, deferred[col]); });
+    deferred = {};
+    render();
+  });
+
+  function gate(html) {
+    document.body.classList.add('locked');
+    app.innerHTML = '<div class="gate">' + html + '</div>';
   }
 
   function product(id) { return db.products.find(function (p) { return p.id === id; }); }
@@ -221,11 +332,13 @@
 
   function viewDados() {
     return '' +
-      '<div class="head"><div><h1>Backup dos dados</h1><p class="muted">Os dados ficam guardados só neste navegador. Exporte com frequência.</p></div></div>' +
+      '<div class="head"><div><h1>Backup dos dados</h1><p class="muted">' + (cloud
+        ? 'Os dados ficam salvos na nuvem. Mesmo assim, guarde uma cópia de vez em quando.'
+        : 'Os dados ficam guardados só neste navegador. Exporte com frequência.') + '</p></div></div>' +
       '<div class="backup">' +
         '<section class="panel"><h2>Exportar</h2><p>Baixa um arquivo com todos os produtos, vendas e clientes.</p>' +
           '<button class="btn" data-action="export">Baixar backup</button></section>' +
-        '<section class="panel"><h2>Importar</h2><p>Restaura um backup. Substitui os dados atuais deste navegador.</p>' +
+        '<section class="panel"><h2>Importar</h2><p>Restaura um backup. Substitui todos os dados atuais.</p>' +
           '<label class="btn btn--ghost">Escolher arquivo<input type="file" accept="application/json,.json" data-action="import" hidden></label></section>' +
         '<section class="panel"><h2>Recomeçar</h2><p>Apaga tudo e volta ao catálogo de exemplo da loja.</p>' +
           '<button class="btn btn--danger" data-action="reset">Apagar dados</button></section>' +
@@ -240,8 +353,9 @@
   var ROUTES = { '': ['painel', viewPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], clientes: ['clientes', viewClientes], dados: ['dados', viewDados] };
   function route() { return location.hash.replace(/^#\/?/, ''); }
   function render() {
+    if (!db) return;
     var r = ROUTES[route()] || ROUTES[''];
-    app.innerHTML = r[1]();
+    app.innerHTML = (cloud ? '' : '<p class="notice">Login desligado: qualquer pessoa com o link abre esta página e os dados ficam só neste navegador. Veja no README como ativar o login.</p>') + r[1]();
     $$('[data-nav]').forEach(function (a) {
       if (a.dataset.nav === r[0]) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
@@ -452,7 +566,7 @@
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     },
     reset: function () {
-      if (!confirm('Apagar todas as vendas, clientes e alterações de produtos deste navegador?')) return;
+      if (!confirm('Apagar todas as vendas, clientes e alterações de produtos?')) return;
       db = seed(); save(); render(); toast('Dados reiniciados.');
     }
   };
@@ -489,6 +603,26 @@
   });
 
   window.addEventListener('hashchange', function () { render(); app.focus(); });
-  load();
-  render();
+  if (!cloud) {
+    db = loadLocal() || seed();
+    render();
+  } else {
+    gate('<p>Carregando…</p>');
+    var asked = false;
+    AUTH.onChange(function (s) {
+      if (!s.user) {
+        stopCloud();
+        gate('<h1>Área restrita</h1><p>Entre com a conta de administrador da JM Store para abrir a gestão.</p>' +
+          '<button class="btn" data-acct="login">Entrar</button><a href="./">Voltar à loja</a>');
+        if (!asked) { asked = true; AUTH.login('Entre com a conta de administrador.'); }
+      } else if (!s.isAdmin) {
+        stopCloud();
+        gate('<h1>Sem acesso</h1><p>A conta <b>' + esc(s.user.email) + '</b> não é administradora da loja.</p>' +
+          '<p>Para liberar, crie no Firestore a coleção <b>admins</b> com um documento cujo ID é:</p><code>' + esc(s.user.uid) + '</code>' +
+          '<button class="btn btn--ghost" data-acct="logout">Sair e entrar com outra conta</button><a href="./">Voltar à loja</a>');
+      } else if (!unsubs.length) {
+        startCloud();
+      }
+    });
+  }
 })();
