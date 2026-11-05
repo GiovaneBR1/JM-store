@@ -68,12 +68,54 @@ Protótipo: https://claude.ai/artifact/H9Pjm7ZQLC4VJCTHMRHxvF
 3. **IA generativa integrada ao site** (cria cenário, luz, reflexo): é o resultado mais "comercial", mas precisa de servidor e tem custo por imagem.
 4. **Dica de foto para a dona:** luz natural de janela, fundo liso claro, produto no centro, sempre o mesmo ângulo. Ajuda qualquer uma das opções acima.
 
+## Automações (ordem combinada)
+
+Todas rodam no servidor que já está ativo (Firebase, plano Blaze), agendadas por hora ou por dia, e saem por e-mail/notificação. Custo esperado: dentro da cota grátis. A ideia é lançar a loja depois da Fase 1 e ir ligando as outras aos poucos.
+
+### Fase 1 — operação (antes ou junto do lançamento)
+1. [x] **Confirmação automática com estoque** (liga/desliga na gestão, começa desligada): pedido com todos os itens em estoque vira "Confirmado" sozinho e o estoque fica reservado; se faltar algo, fica "Novo" e a dona é avisada no e-mail do pedido.
+2. [x] **Lembrete de pagamento PIX:** pedido PIX confirmado e não pago em 24 h → lembrete ao cliente com a chave; em 48 h → aviso para a dona. Pedido "Novo" parado há 24 h também gera aviso para a dona.
+3. [x] **Cancelamento automático:** pedido PIX confirmado e não pago em X dias (padrão 3, de 1 a 30, ou desligado) é cancelado, o estoque volta e cliente e dona são avisados. Cartão e pedidos ainda "Novo" nunca são cancelados sozinhos.
+4. [x] **Alerta de estoque baixo:** produto chegou no mínimo ou esgotou → e-mail e notificação para a dona (só na hora em que cruza o limite).
+5. [x] **Resumo diário da dona:** às 8h, e-mail com as vendas de ontem, o que está a receber, pedidos para confirmar, separar, entregar ou retirar, devoluções e estoque baixo.
+
+Tudo fica em **Pedidos → Automações**. O estoque passa a ser reservado quando o pedido é confirmado (à mão ou sozinho) e volta se o pedido for cancelado.
+
+### Fase 2 — vender mais
+6. [ ] **"Avise-me quando chegar":** cliente deixa o e-mail no produto esgotado; ao dar entrada no estoque, recebe o aviso.
+7. [ ] **Autorização de novidades (LGPD) + boas-vindas:** caixinha "Quero receber novidades e ofertas" no cadastro/checkout, link para parar de receber, e e-mail de boas-vindas com cupom de primeira compra.
+8. [ ] **Carrinho abandonado:** cliente logado com sacola parada há algumas horas → "Esqueceu algo?" (só com autorização).
+9. [ ] **Pedido de avaliação:** alguns dias depois de "Finalizado" → "Gostou? Conte pra gente" (link para avaliar no Google/Instagram).
+10. [ ] **Relatório mensal por e-mail:** no dia 1, PDF e planilha do mês anterior para a dona.
+
+### Fase 3 — fidelizar
+11. [ ] **Recompra:** campo "dias para acabar" no produto (ex.: protetor 60 dias) → lembrete "Está acabando?" (com autorização).
+12. [ ] **Aniversário:** data opcional no cadastro → cupom no mês do aniversário (com autorização).
+13. [ ] **Cliente sumido:** sem compra há 90 dias → cupom de volta (com autorização).
+14. [ ] **Alerta de meta:** no meio do mês, projeção abaixo da meta → aviso para a dona.
+15. [ ] **Fiado vencido:** venda "a receber" há mais de X dias → lembrete para a dona (e, se ela quiser, para o cliente).
+16. [ ] **Produtos parados há 60 dias:** sugestão de promoção/cupom para a dona.
+
+### Sem código (já dá para usar)
+- [ ] **WhatsApp Business da dona:** mensagem de saudação automática ("Recebemos seu pedido, já vamos confirmar") e respostas rápidas (/confirmado, /pix, /retirada). Passar os textos prontos.
+
+
+## Para estudar depois
+
+- [ ] **Carrossel de produtos na página inicial** (depois das automações). Caminhos a comparar num protótipo:
+  1. **Prateleiras deslizantes** ("Destaques", "Novidades", "Mais vendidos") abaixo da vitrine, montadas sozinhas com os dados da loja, sem girar sozinhas. Recomendado: funciona bem no celular.
+  2. **Banner de campanhas** no topo (2 ou 3 banners trocados na gestão: datas especiais, frete grátis), só quando houver campanha; se girar, devagar, com pausa ao tocar e pontinhos de navegação.
+  3. Trocar a vitrine dos nichos por um carrossel. Não recomendado: a vitrine é o elemento mais marcante da loja.
+  - Combinação a testar: vitrine no topo + prateleira "Destaques" logo abaixo + banner opcional.
+
 ## Ideias para a v2
 
 Não entram na v1. Ficam anotadas para depois que a loja estiver vendendo pelo site por alguns meses.
 
 - **Confirmação automática do PIX:** o site gera um QR Code de PIX para cada pedido, com o valor e o número do pedido; quando o cliente paga, o pedido vira "Pago" sozinho. Mais simples e barato que Open Finance para o mesmo objetivo. Depende de CNPJ e do banco/plataforma que a loja usar (perguntar à dona).
 - **Pagamento online completo** (PIX e cartão no site) por um gateway, se as vendas online crescerem.
+- **WhatsApp automático nas automações acima:** os mesmos avisos (status do pedido, lembrete de PIX, avise-me, recompra) também pelo WhatsApp, aproveitando a janela de 24 h grátis depois que o cliente manda o pedido.
+- **Respostas automáticas no WhatsApp:** cliente manda "meu pedido" → recebe o status; "horário" → endereço e horário de retirada.
 - **Mensagens automáticas no WhatsApp** (API oficial da Meta) a cada mudança de status do pedido. Custa centavos por mensagem de utilidade (conferir a tabela atual da Meta); precisa de número para a API, conta Meta Business verificada, modelos aprovados e autorização do cliente. Dá para testar antes com o número de teste gratuito da Meta.
-- As três precisam de uma parte em servidor (Cloud Functions, plano Blaze do Firebase com cartão cadastrado). A estrutura de pedidos com status da v1 já serve de base.
+- Todas usam o servidor que já está ativo (Cloud Functions, plano Blaze). A estrutura de pedidos com status da v1 já serve de base.
 - **Open Finance:** só faria sentido para conciliar várias contas ou crédito; não é prioridade.

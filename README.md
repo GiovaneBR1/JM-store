@@ -58,6 +58,13 @@ Funciona com as funções da pasta `functions/` (precisam do plano Blaze do Fire
 
 Para atualizar depois (mudou `functions/` ou `firestore.rules`): no Cloud Shell, `cd JM-store && git pull` e rode de novo o comando de `deploy`.
 
+### Automações (Pedidos → Automações)
+- **Confirmar pedidos sozinho** (começa desligado): com tudo em estoque, o pedido vira "Confirmado", reserva o estoque e o cliente recebe o e-mail. Se faltar algo, fica "Novo" e o e-mail da dona avisa.
+- **Lembrete do PIX:** 24 h depois de confirmado sem pagamento, o cliente recebe a chave de novo; em 48 h a dona é avisada.
+- **Cancelar PIX não pago** depois de X dias (padrão 3): o estoque volta e todos são avisados. Cartão e pedidos "Novo" não são cancelados.
+- **Alerta de estoque baixo** e **resumo diário às 8h** por e-mail.
+- Confirmar um pedido (à mão ou sozinho) reserva o estoque; cancelar devolve; lançar a venda de um pedido reservado não baixa de novo.
+
 ### Notificações no celular da gestão
 1. No console do Firebase: ⚙ Configurações do projeto → **Cloud Messaging** → Configuração da Web → **Certificados push da Web** → Gerar par de chaves. Copie a chave e coloque em `vapidKey` no `js/firebase-config.js` (é pública).
 2. No celular da dona: abra a gestão, **adicione à tela inicial** (no iPhone é obrigatório; no Android é opcional), abra por lá, vá em **Pedidos** e toque em **Ativar avisos neste aparelho**.
