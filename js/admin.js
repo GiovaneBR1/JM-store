@@ -7,7 +7,8 @@
   var KEY = 'jm-admin-v1';
   var AUTH = window.JMAuth;
   var cloud = !!(AUTH && AUTH.enabled);
-  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders'];
+  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders', 'categories', 'settings'];
+  var SHOP = window.JMShop;
   // Status dos pedidos do site (os mesmos rótulos aparecem para o cliente em "Meus pedidos").
   var ORDER_STATUS = [
     ['novo', 'Novo', 'warn'], ['confirmado', 'Confirmado', 'ok'], ['pago', 'Pago', 'ok'],
@@ -16,8 +17,10 @@
   ];
   var CLIENT_LABEL = { novo: 'aguardando confirmação', confirmado: 'confirmado', pago: 'pago', enviado: 'saiu para entrega', retirar: 'pronto para retirada', entregue: 'finalizado', cancelado: 'cancelado' };
   var RETURN_STATUS = { solicitada: ['Devolução solicitada', 'warn'], aprovada: ['Devolução aprovada', 'ok'], recusada: ['Devolução recusada', 'err'], concluida: ['Devolvido', 'neutral'] };
-  var CATS = window.JM_CATEGORIES || [];
-  var PAYMENTS = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Fiado'];
+  // Categorias iniciais (as três primeiras aparecem na vitrine); depois a loja cria as suas na gestão.
+  var DEFAULT_CATS = (window.JM_CATEGORIES || []).map(function (c, i) { return { id: c.slug, name: c.name, order: i, featured: i < 3 }; });
+  var PAYMENTS = ['PIX', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro', 'Fiado'];
+  var DEFAULT_SETTINGS = { id: 'loja', goal: 0, staleDays: 30 };
   var app = document.getElementById('app');
   var modal = document.getElementById('modal');
   var modalForm = document.getElementById('modal-form');
@@ -36,7 +39,13 @@
   }
   function today() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
   function fmtDate(iso) { var p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
-  function catName(slug) { var c = CATS.find(function (c) { return c.slug === slug; }); return c ? c.name : slug || '—'; }
+  function cats() {
+    var list = db && db.categories && db.categories.length ? db.categories : DEFAULT_CATS;
+    return list.slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name); });
+  }
+  function catName(slug) { var c = cats().find(function (c) { return c.id === slug; }); return c ? c.name : slug ? slug : 'Sem categoria'; }
+  function settings() { return (db && db.settings && db.settings[0]) || DEFAULT_SETTINGS; }
+  function totalStock(p) { return SHOP.totalStock(p); }
   function digits(s) { return String(s || '').replace(/\D/g, ''); }
 
   var toastTimer;
@@ -57,7 +66,9 @@
       }),
       customers: [],
       sales: [],
-      coupons: []
+      coupons: [],
+      categories: DEFAULT_CATS.map(function (c) { return Object.assign({}, c); }),
+      settings: [Object.assign({}, DEFAULT_SETTINGS)]
     };
   }
 
@@ -80,19 +91,24 @@
     if (p.image == null) p.image = src.image || '';
     if (p.promoPrice === undefined) p.promoPrice = null;
     if (p.specs === undefined) p.specs = src.specs || null;
-    if (p.variants === undefined) p.variants = src.variants || null;
+    if (p.variants === undefined) p.variants = src.variants ? JSON.parse(JSON.stringify(src.variants)) : null;
+    if (p.content === undefined) p.content = null;
+    if (!p.createdAt) p.createdAt = Date.now();
+    SHOP.normalize(p);
+    if (SHOP.hasOptions(p)) p.stock = SHOP.totalStock(p);
     if (!p.art) p.art = src.art || { perfumes: 'perfume', maquiagem: 'batom', skincare: 'pote' }[p.category] || 'perfume';
     if (!p.tone) p.tone = src.tone || '#BB6499';
     return p;
   }
-  function sellPrice(p) { return p.promoPrice != null && p.promoPrice > 0 ? p.promoPrice : p.price; }
+  function sellPrice(p, v) { return SHOP.unitPrice(p, v); }
 
   // O que a vitrine pode ver de cada produto (sem custo e estoque mínimo).
   function publicProduct(p) {
     return {
       id: p.id, name: p.name, slug: p.slug, category: p.category, price: p.price, promoPrice: p.promoPrice != null && p.promoPrice > 0 ? p.promoPrice : null,
-      stock: p.stock, short: p.short || '', description: p.description || '', featured: !!p.featured, image: p.image || '',
-      specs: p.specs || null, variants: p.variants || null, art: p.art, tone: p.tone
+      stock: totalStock(p), short: p.short || '', description: p.description || '', featured: !!p.featured, image: p.image || '',
+      specs: p.specs || null, art: p.art, tone: p.tone, content: p.content || null,
+      variants: SHOP.hasOptions(p) ? p.variants.map(function (o) { return { name: o.name, price: o.price, promoPrice: o.promoPrice != null && o.promoPrice > 0 ? o.promoPrice : null, stock: o.stock || 0 }; }) : null
     };
   }
 
@@ -102,7 +118,23 @@
     try { data = JSON.parse(localStorage.getItem(KEY)); } catch (e) { data = null; }
     if (!data || !Array.isArray(data.products)) return null;
     data.coupons = data.coupons || [];
+    data.categories = data.categories || [];
+    data.settings = data.settings || [];
     return data;
+  }
+
+  // Garante categorias (incluindo as que os produtos já usam) e as configurações da loja.
+  function ensureBasics() {
+    if (!db.categories) db.categories = [];
+    var launched = db.settings && db.settings[0] && db.settings[0].launched;
+    if (!db.categories.length && !launched) db.categories = DEFAULT_CATS.map(function (c) { return Object.assign({}, c); });
+    db.products.forEach(function (p) {
+      if (p.category && !db.categories.some(function (c) { return c.id === p.category; })) {
+        db.categories.push({ id: p.category, name: p.category.charAt(0).toUpperCase() + p.category.slice(1), order: db.categories.length, featured: false });
+      }
+    });
+    if (!db.settings || !db.settings.length) db.settings = [Object.assign({}, DEFAULT_SETTINGS)];
+    db.products.forEach(enrich);
   }
 
   // JSON com as chaves em ordem, para comparar com o que já está na nuvem.
@@ -157,7 +189,9 @@
   }
 
   // Catálogo e pedidos do site não fazem parte do backup: são mantidos ao reiniciar ou importar.
-  function keepCloud(data) { return Object.assign(data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [] }); }
+  function keepCloud(data) {
+    return Object.assign({ categories: (db && db.categories) || [], settings: (db && db.settings) || [] }, data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [] });
+  }
 
   function applySnap(col, snap) {
     db[col] = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
@@ -173,7 +207,7 @@
   function startCloud() {
     stopCloud();
     app.innerHTML = '<p class="empty">Carregando os dados da loja…</p>';
-    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [] };
+    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [], categories: [], settings: [] };
     COLS.forEach(function (col) {
       unsubs.push(fs.collection(col).onSnapshot(function (snap) {
         if (!loaded[col]) {
@@ -204,17 +238,19 @@
   }
 
   function firstLoad() {
-    var empty = !db.products.length && !db.customers.length && !db.sales.length;
+    // Primeira vez da loja: sem configurações e sem dados. Depois do "Preparar para o lançamento",
+    // as configurações existem e a gestão não volta a criar os produtos de exemplo.
+    var empty = !db.settings.length && !db.products.length && !db.customers.length && !db.sales.length;
     if (empty) {
       var local = loadLocal();
       if (local && confirm('Encontramos dados da gestão salvos neste navegador (' + local.sales.length + ' venda(s), ' +
           local.customers.length + ' cliente(s)). Enviar para a nuvem?')) {
-        db = keepCloud({ products: local.products, customers: local.customers, sales: local.sales, coupons: local.coupons });
+        db = keepCloud({ products: local.products, customers: local.customers, sales: local.sales, coupons: local.coupons, categories: local.categories, settings: local.settings });
       } else {
         db = keepCloud(seed());
       }
     }
-    db.products.forEach(enrich);
+    ensureBasics();
     save(); // também mantém o catálogo público da vitrine em dia
     document.body.classList.remove('locked');
     render();
@@ -234,15 +270,26 @@
   }
 
   function product(id) { return db.products.find(function (p) { return p.id === id; }); }
+  // Mexe no estoque do produto ou, se ele tem opções, no da opção vendida.
+  function adjustStock(productId, variant, delta) {
+    var p = product(productId);
+    if (!p) return;
+    var o = SHOP.optionOf(p, variant);
+    if (o) { o.stock = (o.stock || 0) + delta; p.stock = SHOP.totalStock(p); }
+    else p.stock = (p.stock || 0) + delta;
+  }
+  function stockOf(productId, variant) { var p = product(productId); return p ? SHOP.stockOf(p, variant) : 0; }
+  function itemLabel(i) { return i.name + (i.variant ? ' (' + i.variant + ')' : ''); }
   function customer(id) { return db.customers.find(function (c) { return c.id === id; }); }
   function saleTotal(s) {
     return round(s.items.reduce(function (t, i) { return t + i.qty * i.price; }, 0) - (s.discount || 0));
   }
   function saleCost(s) { return round(s.items.reduce(function (t, i) { return t + i.qty * (i.cost || 0); }, 0)); }
   function stockPill(p) {
-    if (p.stock <= 0) return '<span class="pill pill--err">Esgotado</span>';
-    if (p.stock <= p.minStock) return '<span class="pill pill--warn">' + p.stock + ' — repor</span>';
-    return '<span class="pill pill--ok">' + p.stock + '</span>';
+    var st = totalStock(p);
+    if (st <= 0) return '<span class="pill pill--err">Esgotado</span>';
+    if (st <= p.minStock) return '<span class="pill pill--warn">' + st + ' — repor</span>';
+    return '<span class="pill pill--ok">' + st + '</span>';
   }
   function statusPill(s) {
     return s.status === 'pendente' ? '<span class="pill pill--warn">A receber</span>' : '<span class="pill pill--ok">Pago</span>';
@@ -252,50 +299,27 @@
   }
 
   // ---------- telas ----------
-  function viewPainel() {
-    var t = today(), month = t.slice(0, 7);
-    var monthSales = db.sales.filter(function (s) { return s.date.slice(0, 7) === month; });
-    var daySales = db.sales.filter(function (s) { return s.date === t; });
-    var sum = function (list, fn) { return list.reduce(function (acc, s) { return acc + fn(s); }, 0); };
-    var monthRevenue = sum(monthSales, saleTotal);
-    var monthProfit = monthRevenue - sum(monthSales, saleCost);
-    var noCost = monthSales.some(function (s) { return s.items.some(function (i) { return !i.cost; }); });
-    var pending = db.sales.filter(function (s) { return s.status === 'pendente'; });
-    var low = db.products.filter(function (p) { return p.stock <= p.minStock; }).sort(function (a, b) { return a.stock - b.stock; });
-
-    var qtyBy = {};
-    monthSales.forEach(function (s) { s.items.forEach(function (i) { qtyBy[i.name] = (qtyBy[i.name] || 0) + i.qty; }); });
-    var top = Object.keys(qtyBy).map(function (k) { return [k, qtyBy[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5);
-    var max = top.length ? top[0][1] : 1;
-    var monthLabel = new Date().toLocaleDateString('pt-BR', { month: 'long' });
-
-    return '' +
-      (newOrders().length ? '<p class="notice notice--ok">🛍️ ' + newOrders().length + ' pedido(s) novo(s) do site. <a href="#/pedidos">Ver pedidos</a></p>' : '') +
-      '<div class="head"><div><h1>Painel</h1><p class="muted">Resumo de ' + monthLabel + '</p></div>' +
-      '<div class="actions"><button class="btn" data-action="new-sale">+ Nova venda</button></div></div>' +
-      '<section class="stats">' +
-        stat('Vendido hoje', brl(sum(daySales, saleTotal)), daySales.length + ' venda(s)') +
-        stat('Vendido no mês', brl(monthRevenue), monthSales.length + ' venda(s)') +
-        stat('Lucro no mês', brl(monthProfit), noCost ? 'há itens sem custo cadastrado' : 'preço − custo dos produtos') +
-        stat('A receber', brl(sum(pending, saleTotal)), pending.length + ' venda(s) pendente(s)') +
-      '</section>' +
-      '<div class="cols">' +
-        '<section class="panel"><h2>Últimas vendas</h2>' + salesTable(sortedSales().slice(0, 6), true) + '</section>' +
-        '<div style="display:grid;gap:1.25rem;align-content:start">' +
-          '<section class="panel"><h2>Mais vendidos no mês</h2>' +
-            (top.length ? '<ol class="bars">' + top.map(function (r) {
-              return '<li><span>' + esc(r[0]) + '</span><b class="num">' + r[1] + ' un.</b><i style="--w:' + Math.round(r[1] / max * 100) + '%"></i></li>';
-            }).join('') + '</ol>' : '<p class="muted">Nenhuma venda neste mês ainda.</p>') +
-          '</section>' +
-          '<section class="panel"><h2>Estoque para repor</h2>' +
-            (low.length ? '<table><tbody>' + low.map(function (p) {
-              return '<tr><td>' + esc(p.name) + '</td><td class="num">' + stockPill(p) + '</td>' +
-                '<td class="row-actions"><button class="link" data-action="restock" data-id="' + p.id + '">+ Entrada</button></td></tr>';
-            }).join('') + '</tbody></table>' : '<p class="muted">Tudo em dia. 🎉</p>') +
-          '</section>' +
-        '</div>' +
-      '</div>';
+  function painelCtx() {
+    return {
+      sales: db.sales, products: db.products, customers: db.customers, settings: settings(),
+      product: product, customer: customer, catName: catName, saleTotal: saleTotal, saleCost: saleCost,
+      totalStock: totalStock, minPrice: SHOP.minPrice, toast: toast,
+      onGoal: function (v) { settings().goal = v; save(); render(); toast(v ? 'Meta do mês: ' + brl(v) + '.' : 'Meta removida.'); }
+    };
   }
+  function viewPainel() {
+    var low = db.products.filter(function (p) { return totalStock(p) <= p.minStock; }).sort(function (a, b) { return totalStock(a) - totalStock(b); });
+    return '' +
+      (newOrders().length ? '<p class="notice notice--ok">🛍️ ' + newOrders().length + ' pedido(s) do site esperando você. <a href="#/pedidos">Ver pedidos</a></p>' : '') +
+      '<div class="head"><div><h1>Painel</h1></div>' +
+      '<div class="actions"><button class="btn" data-action="new-sale">+ Nova venda</button></div></div>' +
+      window.JMPainel.html(painelCtx()) +
+      (low.length ? '<section class="panel" style="margin-top:1.25rem"><h2>Estoque para repor</h2><table><tbody>' + low.map(function (p) {
+        return '<tr><td>' + esc(p.name) + '</td><td class="num">' + stockPill(p) + '</td>' +
+          '<td class="row-actions"><button class="link" data-action="restock" data-id="' + p.id + '">+ Entrada</button></td></tr>';
+      }).join('') + '</tbody></table></section>' : '');
+  }
+  function bindPainel() { window.JMPainel.bind(app, painelCtx(), render); }
   function stat(label, value, sub) { return '<div class="stat"><span>' + label + '</span><b>' + value + '</b><small>' + sub + '</small></div>'; }
 
   function salesTable(list, compact) {
@@ -305,7 +329,7 @@
       (compact ? '' : '<th></th>') + '</tr></thead><tbody>' +
       list.map(function (s) {
         var c = customer(s.customerId);
-        var items = s.items.map(function (i) { return i.qty + '× ' + esc(i.name); }).join('<br>');
+        var items = s.items.map(function (i) { return i.qty + '× ' + esc(itemLabel(i)); }).join('<br>');
         return '<tr><td>' + fmtDate(s.date) + '</td><td>' + (c ? esc(c.name) : '<span class="muted">Balcão</span>') + '</td>' +
           (compact ? '' : '<td>' + items + '</td><td>' + esc(s.payment) + '</td>') +
           '<td>' + statusPill(s) + '</td><td class="num"><b>' + brl(saleTotal(s)) + '</b></td>' +
@@ -317,7 +341,7 @@
       }).join('') + '</tbody></table></div>';
   }
 
-  var filters = { vendas: { month: today().slice(0, 7), status: '' }, produtos: { q: '', cat: '' }, clientes: { q: '' } };
+  var filters = { vendas: { month: today().slice(0, 7), status: '' }, produtos: { q: '', cat: '', sit: '' }, clientes: { q: '' } };
 
   function viewVendas() {
     var f = filters.vendas;
@@ -339,31 +363,40 @@
 
   function viewProdutos() {
     var f = filters.produtos, q = f.q.toLowerCase();
+    var last = window.JMPainel.lastSales(painelCtx()), now = window.JMPainel.todayDate(), sit = {};
+    db.products.forEach(function (p) { sit[p.id] = window.JMPainel.productSituation(painelCtx(), p, last, now); });
     var list = db.products.filter(function (p) {
-      return (!f.cat || p.category === f.cat) && (!q || p.name.toLowerCase().indexOf(q) !== -1);
+      return (!f.cat || p.category === f.cat) && (!q || p.name.toLowerCase().indexOf(q) !== -1) && (!f.sit || (f.sit === 'parados' ? sit[p.id].stopped : totalStock(p) <= 0));
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
-    var stockValue = db.products.reduce(function (t, p) { return t + p.stock * p.cost; }, 0);
+    var stockValue = db.products.reduce(function (t, p) { return t + totalStock(p) * (p.cost || 0); }, 0);
+    var stoppedN = db.products.filter(function (p) { return sit[p.id].stopped; }).length;
     return '' +
       '<div class="head"><div><h1>Produtos e estoque</h1><p class="muted">Valor em estoque (pelo custo): <b>' + brl(stockValue) + '</b></p></div>' +
       '<div class="actions"><button class="btn" data-action="new-product">+ Novo produto</button></div></div>' +
       '<div class="toolbar">' +
         '<input type="search" placeholder="Buscar produto…" data-filter="produtos.q" value="' + esc(f.q) + '" aria-label="Buscar produto">' +
         '<select data-filter="produtos.cat" aria-label="Categoria">' + opt('', 'Todas as categorias', f.cat) +
-          CATS.map(function (c) { return opt(c.slug, c.name, f.cat); }).join('') + '</select>' +
+          cats().map(function (c) { return opt(c.id, c.name, f.cat); }).join('') + '</select>' +
+        '<select data-filter="produtos.sit" aria-label="Situação">' + opt('', 'Todas as situações', f.sit) + opt('parados', 'Só parados (' + stoppedN + ')', f.sit) + opt('esgotados', 'Só esgotados', f.sit) + '</select>' +
         '<span class="count">' + list.length + ' produto(s)</span>' +
       '</div>' +
       (list.length ? '<div class="table-wrap"><table><thead><tr><th></th><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th>' +
-        '<th class="num">Margem</th><th class="num">Estoque</th><th></th></tr></thead><tbody>' +
+        '<th class="num">Margem</th><th class="num">Estoque</th><th>Situação</th><th></th></tr></thead><tbody>' +
         list.map(function (p) {
-          var price = sellPrice(p);
+          var opts = SHOP.hasOptions(p), price = opts ? SHOP.minPrice(p) : sellPrice(p), st = sit[p.id];
           var margin = p.cost > 0 && price > 0 ? Math.round((price - p.cost) / price * 100) + '%' : '<span class="muted">—</span>';
+          var situation = totalStock(p) <= 0 ? '<span class="muted">Sem estoque</span>'
+            : st.stopped ? '<span class="pill pill--warn" title="' + (st.never ? 'Nunca vendeu desde o cadastro' : 'Última venda em ' + fmtDate(st.last)) + '">Parado há ' + st.days + ' dias</span>'
+            : '<span class="pill pill--neutral">' + (st.last ? 'Vendeu em ' + fmtDate(st.last).slice(0, 5) : 'Novo') + '</span>';
           return '<tr><td class="thumb">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span aria-hidden="true">📷</span>') + '</td>' +
-            '<td>' + esc(p.name) + (p.featured ? ' <span class="pill pill--neutral">Destaque</span>' : '') + '<span class="sub">' + esc(catName(p.category)) + '</span></td>' +
+            '<td>' + esc(p.name) + (p.featured ? ' <span class="pill pill--neutral">Destaque</span>' : '') +
+              '<span class="sub">' + esc(catName(p.category)) + (SHOP.contentLabel(p) ? ' · ' + esc(SHOP.contentLabel(p)) : '') + (opts ? ' · ' + p.variants.length + ' opções: ' + esc(p.variants.map(function (o) { return o.name + ' (' + (o.stock || 0) + ')'; }).join(', ')) : '') + '</span></td>' +
             '<td class="num">' + (p.cost ? brl(p.cost) : '<span class="muted">—</span>') + '</td>' +
-            '<td class="num">' + (price !== p.price ? '<s class="muted">' + brl(p.price) + '</s><br>' : '') + brl(price) + '</td><td class="num">' + margin + '</td>' +
-            '<td class="num">' + stockPill(p) + '</td>' +
+            '<td class="num">' + (opts ? (SHOP.samePrice(p) ? '' : '<small class="muted">a partir de</small><br>') : price !== p.price ? '<s class="muted">' + brl(p.price) + '</s><br>' : '') + brl(price) + '</td><td class="num">' + margin + '</td>' +
+            '<td class="num">' + stockPill(p) + '</td><td>' + situation + '</td>' +
             '<td class="row-actions"><button class="link" data-action="restock" data-id="' + p.id + '">+ Entrada</button>' +
             '<button class="link" data-action="edit-product" data-id="' + p.id + '">Editar</button>' +
+            '<button class="link" data-action="duplicate-product" data-id="' + p.id + '">Duplicar</button>' +
             '<button class="link link--danger" data-action="delete-product" data-id="' + p.id + '">Excluir</button></td></tr>';
         }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum produto encontrado.</p>');
   }
@@ -412,7 +445,7 @@
   function undoSale(o) {
     var sale = o.saleId && db.sales.find(function (x) { return x.id === o.saleId; });
     if (sale) {
-      sale.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock += i.qty; });
+      sale.items.forEach(function (i) { adjustStock(i.productId, i.variant, i.qty); });
       db.sales = db.sales.filter(function (x) { return x !== sale; });
     }
     delete o.saleId;
@@ -487,21 +520,39 @@
       c = { id: uid('c'), name: o.customer.name, phone: o.customer.phone, neighborhood: o.delivery.neighborhood || '', notes: o.customer.email || '' };
       db.customers.push(c);
     }
-    var payMap = { 'PIX': 'PIX', 'Pagar na entrega': 'Dinheiro' };
     var sale = {
-      id: uid('v'), createdAt: Date.now(), date: today(), customerId: c.id,
-      payment: payMap[o.payment] || 'PIX',
+      id: uid('v'), createdAt: Date.now(), date: today(), customerId: c.id, channel: 'site', orderId: o.id,
+      payment: /cart/i.test(o.payment) ? 'Cartão (na entrega)' : /dinheiro|entrega/i.test(o.payment) ? 'Dinheiro' : 'PIX',
       status: ['pago', 'enviado', 'retirar', 'entregue'].indexOf(o.status) !== -1 ? 'pago' : 'pendente',
       discount: o.coupon ? o.coupon.discount : 0,
       items: o.items.map(function (i) {
         var p = product(i.productId);
-        return { productId: i.productId, name: i.name + (i.variant ? ' (' + i.variant + ')' : ''), qty: i.qty, price: i.price, cost: p ? p.cost : 0 };
+        return { productId: i.productId, name: p ? p.name : i.name, variant: i.variant || '', category: i.category || (p ? p.category : ''), qty: i.qty, price: i.price, cost: p ? p.cost || 0 : 0 };
       })
     };
-    sale.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock -= i.qty; });
+    sale.items.forEach(function (i) { adjustStock(i.productId, i.variant, -i.qty); });
     db.sales.push(sale);
     o.saleId = sale.id;
     if (o.status === 'novo') o.status = 'confirmado';
+  }
+
+  function viewCategorias() {
+    var list = cats(), featuredN = list.filter(function (c) { return c.featured; }).length;
+    return '' +
+      '<div class="head"><div><h1>Categorias</h1><p class="muted">Viram os filtros da loja. Marque até 3 para aparecer na vitrine da página inicial.</p></div>' +
+      '<div class="actions"><button class="btn" data-action="new-category">+ Nova categoria</button></div></div>' +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Categoria</th><th class="num">Produtos</th><th>Na vitrine</th><th></th></tr></thead><tbody>' +
+        list.map(function (c, i) {
+          var n = db.products.filter(function (p) { return p.category === c.id; }).length;
+          return '<tr><td class="row-actions" style="text-align:left">' +
+              '<button class="link" data-action="cat-up" data-id="' + esc(c.id) + '" aria-label="Subir"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+              '<button class="link" data-action="cat-down" data-id="' + esc(c.id) + '" aria-label="Descer"' + (i === list.length - 1 ? ' disabled' : '') + '>↓</button></td>' +
+            '<td><b>' + esc(c.name) + '</b></td><td class="num">' + n + '</td>' +
+            '<td><label class="check"><input type="checkbox" data-cat-featured="' + esc(c.id) + '"' + (c.featured ? ' checked' : '') + (!c.featured && featuredN >= 3 ? ' disabled title="Já há 3 na vitrine"' : '') + '> Vitrine</label></td>' +
+            '<td class="row-actions"><button class="link" data-action="rename-category" data-id="' + esc(c.id) + '">Renomear</button>' +
+              '<button class="link link--danger" data-action="delete-category" data-id="' + esc(c.id) + '">Excluir</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhuma categoria ainda.</p>') +
+      '<p class="muted" style="margin-top:1rem;font-size:.9rem">Na loja, só aparecem as categorias que têm produtos. Na vitrine, Perfumes, Maquiagem e Skincare usam os desenhos da loja; as outras mostram a foto de um produto da categoria.</p>';
   }
 
   function couponLabel(c) { return c.type === 'percent' ? c.value + '%' : brl(c.value); }
@@ -532,8 +583,15 @@
           '<button class="btn" data-action="export">Baixar backup</button></section>' +
         '<section class="panel"><h2>Importar</h2><p>Restaura um backup. Substitui todos os dados atuais.</p>' +
           '<label class="btn btn--ghost">Escolher arquivo<input type="file" accept="application/json,.json" data-action="import" hidden></label></section>' +
-        '<section class="panel"><h2>Recomeçar</h2><p>Apaga tudo e volta ao catálogo de exemplo da loja.</p>' +
-          '<button class="btn btn--danger" data-action="reset">Apagar dados</button></section>' +
+      '</div>' +
+      '<div class="head" style="margin-top:2rem"><div><h2 style="font-size:1.8rem">Treino e lançamento</h2><p class="muted">Para conhecer a gestão com dados de mentira e, depois, deixar tudo pronto para as vendas de verdade.</p></div></div>' +
+      '<div class="backup">' +
+        '<section class="panel"><h2>Dados de demonstração</h2><p>Preenche clientes, vendas dos últimos meses, pedidos do site (com uma devolução) e um cupom, todos fictícios e marcados como demonstração. O estoque não muda.</p>' +
+          (db.sales.some(function (x) { return x.demo; }) ? '<p class="notice">Há dados de demonstração carregados.</p>' : '') +
+          '<div class="actions"><button class="btn btn--ghost" data-action="demo-load">Carregar demonstração</button>' +
+          (db.sales.some(function (x) { return x.demo; }) || db.customers.some(function (x) { return x.demo; }) ? '<button class="btn btn--danger" data-action="demo-clear">Tirar demonstração</button>' : '') + '</div></section>' +
+        '<section class="panel"><h2>Preparar para o lançamento</h2><p>Apaga os dados de teste para começar as vendas de verdade. Você escolhe o que apagar.</p>' +
+          '<button class="btn btn--danger" data-action="launch">Preparar para o lançamento</button></section>' +
       '</div>';
   }
 
@@ -542,12 +600,13 @@
   }
 
   // ---------- roteamento ----------
-  var ROUTES = { '': ['painel', viewPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], clientes: ['clientes', viewClientes], pedidos: ['pedidos', viewPedidos], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
+  var ROUTES = { '': ['painel', viewPainel, bindPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], categorias: ['categorias', viewCategorias], clientes: ['clientes', viewClientes], pedidos: ['pedidos', viewPedidos], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
   function route() { return location.hash.replace(/^#\/?/, ''); }
   function render() {
     if (!db) return;
     var r = ROUTES[route()] || ROUTES[''];
     app.innerHTML = (cloud ? '' : '<p class="notice">Login desligado: qualquer pessoa com o link abre esta página e os dados ficam só neste navegador. Veja no README como ativar o login.</p>') + r[1]();
+    if (r[2]) r[2]();
     var badge = $('#orders-badge'), n = newOrders().length;
     if (badge) { badge.textContent = n; badge.hidden = !n; }
     $$('[data-nav]').forEach(function (a) {
@@ -562,7 +621,8 @@
     modalForm.onsubmit = function (e) {
       if (e.submitter && e.submitter.value === 'cancel') return;
       e.preventDefault();
-      if (onSubmit(new FormData(modalForm)) !== false) { modal.close(); save(); render(); }
+      var r = onSubmit(new FormData(modalForm), e.submitter);
+      if (r !== false) { modal.close(); save(); render(); if (typeof r === 'function') setTimeout(r); }
     };
     modal.showModal();
     var first = $('input, select', modalForm);
@@ -599,60 +659,214 @@
     });
   }
 
-  function productForm(p) {
+  // ---------- remoção de fundo (opcional, roda no navegador, sem custo) ----------
+  // Biblioteca @imgly/background-removal (licença AGPL; o código do site é aberto no GitHub).
+  var BG_LIB = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm';
+  var BG_COLOR = '#F3E6E1';
+  var bgLib = null;
+  function loadBgLib() {
+    if (window.JM_BG_REMOVE) return Promise.resolve(window.JM_BG_REMOVE); // usado nos testes
+    if (!bgLib) bgLib = import(BG_LIB).then(function (m) { return m.removeBackground || m.default; }, function (e) { bgLib = null; throw e; });
+    return bgLib;
+  }
+  function blobToImage(blob) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(blob), img = new Image();
+      img.onload = function () { res(img); setTimeout(function () { URL.revokeObjectURL(url); }, 0); };
+      img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('imagem')); };
+      img.src = url;
+    });
+  }
+  // Recorta o produto, centraliza num quadro 4:5 com o fundo da loja e uma sombra suave.
+  function cutoutToStudio(cutBlob) {
+    return blobToImage(cutBlob).then(function (img) {
+      var w = img.width, h = img.height, tmp = document.createElement('canvas');
+      tmp.width = w; tmp.height = h;
+      var tc = tmp.getContext('2d'); tc.drawImage(img, 0, 0);
+      var px = tc.getImageData(0, 0, w, h).data, x0 = w, y0 = h, x1 = -1, y1 = -1;
+      for (var y = 0; y < h; y += 2) for (var x = 0; x < w; x += 2) {
+        if (px[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      if (x1 < 0) throw new Error('vazio');
+      var bw = x1 - x0 + 1, bh = y1 - y0 + 1, W = 900, H = 1125;
+      var scale = Math.min(W * 0.72 / bw, H * 0.72 / bh), dw = bw * scale, dh = bh * scale;
+      var dx = (W - dw) / 2, dy = H * 0.86 - dh;
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var ctx = c.getContext('2d');
+      ctx.fillStyle = BG_COLOR; ctx.fillRect(0, 0, W, H);
+      var glow = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, W * 0.75);
+      glow.addColorStop(0, 'rgba(255,255,255,.55)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+      ctx.save(); ctx.filter = 'blur(14px)'; ctx.fillStyle = 'rgba(59,20,36,.22)';
+      ctx.beginPath(); ctx.ellipse(W / 2, dy + dh + 6, dw * 0.42, 16, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.drawImage(tmp, x0, y0, bw, bh, dx, dy, dw, dh);
+      var q = 0.85, type = c.toDataURL('image/webp').indexOf('data:image/webp') === 0 ? 'image/webp' : 'image/jpeg', data = c.toDataURL(type, q);
+      while (data.length > 300000 && q > 0.4) { q -= 0.1; data = c.toDataURL(type, q); }
+      return data;
+    });
+  }
+  function removeBackgroundToStudio(file) {
+    return loadBgLib().then(function (removeBackground) { return removeBackground(file, { output: { format: 'image/png' } }); }).then(cutoutToStudio);
+  }
+
+  function optionRow(o) {
+    o = o || { name: '', price: '', promoPrice: '', stock: 0 };
+    return '<div class="opt-row">' +
+      '<input name="optName" value="' + esc(o.name) + '" placeholder="Ex.: 50 ml, Malva, Tom 03" aria-label="Nome da opção">' +
+      '<input name="optPrice" ' + money + ' value="' + esc(o.price) + '" placeholder="Preço" aria-label="Preço da opção">' +
+      '<input name="optPromo" ' + money + ' value="' + esc(o.promoPrice || '') + '" placeholder="Promo" aria-label="Preço promocional da opção">' +
+      '<input name="optStock" type="number" step="1" value="' + esc(o.stock || 0) + '" aria-label="Estoque da opção">' +
+      '<button type="button" class="link link--danger" data-remove-opt aria-label="Remover opção">✕</button></div>';
+  }
+
+  function productForm(p, preset) {
     var isNew = !p;
-    p = p || { name: '', category: CATS[0] ? CATS[0].slug : '', cost: '', price: '', promoPrice: null, stock: 0, minStock: 3, short: '', description: '', featured: false, image: '' };
+    var firstCat = cats()[0];
+    p = p || Object.assign({ name: '', category: firstCat ? firstCat.id : '', cost: '', price: '', promoPrice: null, stock: 0, minStock: 3, short: '', description: '', featured: false, image: '', variants: null, content: null }, preset || {});
+    var hasOpts = SHOP.hasOptions(p), content = p.content || {};
     openModal('<h2>' + (isNew ? 'Novo produto' : 'Editar produto') + '</h2><div class="fields">' +
       field('Nome', 'name', p.name, 'required', true) +
       '<div class="field field--full"><span>Foto</span><div class="photo">' +
         '<div class="photo__img" id="photo-prev">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span>Sem foto</span>') + '</div>' +
-        '<div class="photo__btns"><label class="btn btn--ghost btn--sm">Escolher foto<input type="file" accept="image/*" id="photo-file" hidden></label>' +
-        '<button type="button" class="link link--danger" id="photo-rm"' + (p.image ? '' : ' hidden') + '>Remover foto</button>' +
-        '<small>Foto quadrada ou em pé fica melhor. Ela é reduzida automaticamente.</small></div></div>' +
+        '<div class="photo__btns"><div class="photo__row"><label class="btn btn--ghost btn--sm">Escolher foto<input type="file" accept="image/*" id="photo-file" hidden></label>' +
+        '<label class="btn btn--ghost btn--sm">Tirar foto<input type="file" accept="image/*" capture="environment" id="photo-cam" hidden></label></div>' +
+        '<label class="check" id="bg-wrap" hidden><input type="checkbox" id="bg-remove"> Remover fundo e usar o fundo da loja</label>' +
+        '<small id="bg-status">Foto quadrada ou em pé fica melhor. Ela é reduzida automaticamente.</small>' +
+        '<button type="button" class="link link--danger" id="photo-rm"' + (p.image ? '' : ' hidden') + '>Remover foto</button></div></div>' +
         '<input type="hidden" name="image" value="' + esc(p.image || '') + '"></div>' +
-      '<label class="field"><span>Categoria</span><select name="category">' +
-        CATS.map(function (c) { return opt(c.slug, c.name, p.category); }).join('') + '</select></label>' +
-      field('Estoque atual', 'stock', p.stock, 'type="number" step="1" required') +
+      '<label class="field"><span>Categoria</span><select name="category" id="cat-select">' +
+        cats().map(function (c) { return opt(c.id, c.name, p.category); }).join('') + '<option value="__new">+ Nova categoria…</option></select></label>' +
+      '<label class="field" id="new-cat" hidden><span>Nome da nova categoria</span><input name="newCategory" placeholder="Ex.: Cabelos"></label>' +
+      '<div class="field"><span>Conteúdo da embalagem</span><div class="content-row"><input name="contentQty" ' + money + ' value="' + esc(content.qty || '') + '" placeholder="Ex.: 100" aria-label="Quantidade">' +
+        '<select name="contentUnit" aria-label="Unidade">' + SHOP.UNITS.map(function (u) { return opt(u, u, content.unit || 'ml'); }).join('') + '</select></div></div>' +
       field('Custo (R$)', 'cost', p.cost, money + ' placeholder="Quanto você pagou"') +
       field('Avisar quando chegar em', 'minStock', p.minStock, 'type="number" step="1" min="0"') +
-      field('Preço de venda (R$)', 'price', p.price, money + ' required') +
-      field('Preço promocional (R$)', 'promoPrice', p.promoPrice || '', money + ' placeholder="Deixe vazio se não tiver"') +
+      '<label class="check field--full"><input type="checkbox" id="has-opts"' + (hasOpts ? ' checked' : '') + '> Este produto tem opções (tamanho, cor, tom…), cada uma com preço e estoque</label>' +
+      '<div class="field field--full" id="opts-box"' + (hasOpts ? '' : ' hidden') + '><span>Opções <small>(nome · preço · promo · estoque)</small></span><div class="opts" id="opts">' +
+        (hasOpts ? p.variants.map(optionRow).join('') : optionRow() + optionRow()) + '</div>' +
+        '<button type="button" class="link" id="add-opt" style="justify-self:start">+ Adicionar opção</button></div>' +
+      '<div class="fields fields--sub field--full" id="single-box"' + (hasOpts ? ' hidden' : '') + '>' +
+        field('Preço de venda (R$)', 'price', hasOpts ? '' : p.price, money) +
+        field('Preço promocional (R$)', 'promoPrice', hasOpts ? '' : p.promoPrice || '', money + ' placeholder="Deixe vazio se não tiver"') +
+        field('Estoque atual', 'stock', hasOpts ? 0 : p.stock, 'type="number" step="1"') + '</div>' +
       field('Descrição curta', 'short', p.short || '', 'maxlength="90" placeholder="Aparece no card da vitrine"', true) +
-      '<label class="field field--full"><span>Descrição completa</span><textarea name="description" placeholder="Notas, como usar, volume…">' + esc(p.description || '') + '</textarea></label>' +
+      '<label class="field field--full"><span>Descrição completa</span><textarea name="description" placeholder="Notas, como usar…">' + esc(p.description || '') + '</textarea></label>' +
       '<label class="check field--full"><input type="checkbox" name="featured"' + (p.featured ? ' checked' : '') + '> Mostrar entre os destaques da vitrine</label>' +
-      '</div>' + foot('Salvar'), function (fd) {
-      var promo = num(fd.get('promoPrice')), price = num(fd.get('price'));
-      if (promo && promo >= price) { toast('O preço promocional precisa ser menor que o preço de venda.'); return false; }
+      '</div>' +
+      '<div class="modal__foot"><button class="btn btn--ghost" value="cancel" formnovalidate>Cancelar</button>' +
+        (isNew ? '<button class="btn btn--ghost" value="again">Salvar e cadastrar outro</button>' : '') +
+        '<button class="btn" value="ok">Salvar</button></div>', function (fd, submitter) {
+      var name = fd.get('name').trim();
+      if (!name) { toast('Digite o nome do produto.'); return false; }
+      // categoria (nova, se escolhida)
+      var cat = fd.get('category');
+      if (cat === '__new') {
+        var cname = String(fd.get('newCategory') || '').trim();
+        if (!cname) { toast('Digite o nome da nova categoria.'); return false; }
+        var existing = db.categories.find(function (c) { return c.name.toLowerCase() === cname.toLowerCase(); });
+        cat = existing ? existing.id : addCategory(cname).id;
+      }
+      var opts = $('#has-opts', modalForm).checked, variants = null, price, promo, stock;
+      if (opts) {
+        var names = fd.getAll('optName'), prices = fd.getAll('optPrice'), promos = fd.getAll('optPromo'), stocks = fd.getAll('optStock');
+        variants = names.map(function (n, i) {
+          return { name: n.trim(), price: num(prices[i]), promoPrice: num(promos[i]) > 0 ? num(promos[i]) : null, stock: parseInt(stocks[i], 10) || 0 };
+        }).filter(function (o) { return o.name || o.price; });
+        if (!variants.length) { toast('Cadastre pelo menos uma opção.'); return false; }
+        if (variants.some(function (o) { return !o.name || !(o.price > 0); })) { toast('Cada opção precisa de nome e preço.'); return false; }
+        var seen = {};
+        if (variants.some(function (o) { var k = o.name.toLowerCase(); if (seen[k]) return true; seen[k] = 1; })) { toast('Há duas opções com o mesmo nome.'); return false; }
+        if (variants.some(function (o) { return o.promoPrice && o.promoPrice >= o.price; })) { toast('O preço promocional de cada opção precisa ser menor que o preço dela.'); return false; }
+        price = Math.min.apply(null, variants.map(function (o) { return o.price; })); promo = null;
+        stock = variants.reduce(function (t, o) { return t + o.stock; }, 0);
+      } else {
+        price = num(fd.get('price')); promo = num(fd.get('promoPrice')); stock = parseInt(fd.get('stock'), 10) || 0;
+        if (!(price > 0)) { toast('Digite o preço de venda.'); return false; }
+        if (promo && promo >= price) { toast('O preço promocional precisa ser menor que o preço de venda.'); return false; }
+      }
+      var cq = num(fd.get('contentQty'));
       var data = {
-        name: fd.get('name').trim(), category: fd.get('category'), cost: num(fd.get('cost')),
-        price: price, promoPrice: promo > 0 ? promo : null,
-        stock: parseInt(fd.get('stock'), 10) || 0, minStock: parseInt(fd.get('minStock'), 10) || 0,
+        name: name, category: cat, cost: num(fd.get('cost')), price: price, promoPrice: promo > 0 ? promo : null, stock: stock, variants: variants,
+        content: cq > 0 ? { qty: cq, unit: fd.get('contentUnit') } : null,
+        minStock: parseInt(fd.get('minStock'), 10) || 0,
         short: fd.get('short').trim(), description: fd.get('description').trim(), featured: fd.get('featured') === 'on', image: fd.get('image')
       };
       if (isNew) {
         var id = uid('p');
-        db.products.push(enrich(Object.assign({ id: id, slug: uniqueSlug(data.name, id) }, data)));
+        db.products.push(enrich(Object.assign({ id: id, slug: uniqueSlug(data.name, id), createdAt: Date.now() }, data)));
       } else {
         Object.assign(p, data);
       }
       toast(isNew ? 'Produto cadastrado.' : 'Produto atualizado.');
+      if (isNew && submitter && submitter.value === 'again') return function () { productForm(null, { category: cat }); };
     });
 
+    // categoria nova
+    var catSel = $('#cat-select', modalForm), newCat = $('#new-cat', modalForm);
+    catSel.addEventListener('change', function () { newCat.hidden = catSel.value !== '__new'; if (!newCat.hidden) $('input', newCat).focus(); });
+    // opções
+    var optsBox = $('#opts', modalForm);
+    $('#has-opts', modalForm).addEventListener('change', function (e) {
+      $('#opts-box', modalForm).hidden = !e.target.checked;
+      $('#single-box', modalForm).hidden = e.target.checked;
+    });
+    $('#add-opt', modalForm).addEventListener('click', function () { optsBox.insertAdjacentHTML('beforeend', optionRow()); });
+    optsBox.addEventListener('click', function (e) {
+      if (!e.target.hasAttribute('data-remove-opt')) return;
+      if ($$('.opt-row', optsBox).length > 1) e.target.parentNode.remove(); else optsBox.innerHTML = optionRow();
+    });
+    // foto
     var hidden = $('[name=image]', modalForm), prev = $('#photo-prev', modalForm), rm = $('#photo-rm', modalForm);
-    $('#photo-file', modalForm).addEventListener('change', function (e) {
+    var bgWrap = $('#bg-wrap', modalForm), bgBox = $('#bg-remove', modalForm), bgStatus = $('#bg-status', modalForm);
+    var original = null, plain = '', studio = '';
+    function show(data) { hidden.value = data; prev.innerHTML = data ? '<img src="' + esc(data) + '" alt="">' : '<span>Sem foto</span>'; rm.hidden = !data; }
+    function pick(e) {
       var file = e.target.files[0];
       if (!file) return;
+      original = file; studio = ''; bgBox.checked = false;
       prev.innerHTML = '<span>Carregando…</span>';
       compressImage(file).then(function (data) {
-        hidden.value = data;
-        prev.innerHTML = '<img src="' + data + '" alt="">';
-        rm.hidden = false;
+        plain = data; show(data); bgWrap.hidden = false;
+        bgStatus.textContent = 'Foto oficial da marca ou já recortada? Deixe "Remover fundo" desligado.';
+      }, function () { show(hidden.value); toast('Não foi possível abrir essa imagem.'); });
+      e.target.value = '';
+    }
+    $('#photo-file', modalForm).addEventListener('change', pick);
+    $('#photo-cam', modalForm).addEventListener('change', pick);
+    bgBox.addEventListener('change', function () {
+      if (!bgBox.checked) { show(plain); bgStatus.textContent = 'Usando a foto original.'; return; }
+      if (studio) { show(studio); bgStatus.textContent = 'Fundo removido. Desmarque para voltar à foto original.'; return; }
+      bgBox.disabled = true; prev.classList.add('is-busy');
+      bgStatus.textContent = 'Removendo o fundo… Na primeira vez pode levar até 1 minuto.';
+      removeBackgroundToStudio(original).then(function (data) {
+        studio = data;
+        if (bgBox.checked) { show(data); bgStatus.textContent = 'Fundo removido. Compare com a original desmarcando a opção.'; }
       }, function () {
-        prev.innerHTML = hidden.value ? '<img src="' + esc(hidden.value) + '" alt="">' : '<span>Sem foto</span>';
-        toast('Não foi possível abrir essa imagem.');
-      });
+        bgBox.checked = false; show(plain);
+        bgStatus.textContent = 'Não foi possível remover o fundo desta foto. Confira a internet ou use a foto original.';
+      }).then(function () { bgBox.disabled = false; prev.classList.remove('is-busy'); });
     });
-    rm.addEventListener('click', function () { hidden.value = ''; prev.innerHTML = '<span>Sem foto</span>'; rm.hidden = true; });
+    rm.addEventListener('click', function () { show(''); bgWrap.hidden = true; original = null; });
+  }
+
+  function addCategory(name) {
+    var base = slugify(name), id = base, n = 2;
+    while (db.categories.some(function (c) { return c.id === id; })) id = base + '-' + n++;
+    var c = { id: id, name: name, order: db.categories.reduce(function (m, c) { return Math.max(m, c.order || 0); }, -1) + 1, featured: false };
+    db.categories.push(c);
+    return c;
+  }
+
+  function categoryForm(c) {
+    var isNew = !c;
+    openModal('<h2>' + (isNew ? 'Nova categoria' : 'Renomear categoria') + '</h2><div class="fields">' +
+      field('Nome', 'name', c ? c.name : '', 'required maxlength="30" placeholder="Ex.: Cabelos"', true) + '</div>' + foot('Salvar'), function (fd) {
+      var name = fd.get('name').trim();
+      if (!name) return false;
+      if (db.categories.some(function (x) { return x !== c && x.name.toLowerCase() === name.toLowerCase(); })) { toast('Já existe uma categoria com esse nome.'); return false; }
+      if (isNew) addCategory(name); else c.name = name;
+      toast(isNew ? 'Categoria ' + name + ' criada.' : 'Categoria renomeada.');
+    });
   }
 
   function couponForm(c) {
@@ -676,14 +890,17 @@
   }
 
   function restockForm(p) {
-    openModal('<h2>Entrada de estoque</h2><p>' + esc(p.name) + ' · hoje: <b>' + p.stock + '</b> un.</p><div class="fields">' +
+    var opts = SHOP.hasOptions(p);
+    openModal('<h2>Entrada de estoque</h2><p>' + esc(p.name) + ' · hoje: <b>' + totalStock(p) + '</b> un.</p><div class="fields">' +
+      (opts ? '<label class="field field--full"><span>Opção</span><select name="variant" required>' + p.variants.map(function (o) {
+        return '<option value="' + esc(o.name) + '">' + esc(o.name) + ' (' + (o.stock || 0) + ' em estoque)</option>'; }).join('') + '</select></label>' : '') +
       field('Quantidade que chegou', 'qty', '', 'type="number" step="1" min="1" required') +
       field('Custo por unidade (R$)', 'cost', p.cost || '', money + ' placeholder="Opcional"') +
       '</div>' + foot('Adicionar'), function (fd) {
-      var qty = parseInt(fd.get('qty'), 10) || 0;
-      p.stock += qty;
+      var qty = parseInt(fd.get('qty'), 10) || 0, v = opts ? fd.get('variant') : '';
+      adjustStock(p.id, v, qty);
       if (num(fd.get('cost')) > 0) p.cost = num(fd.get('cost'));
-      toast('+' + qty + ' un. de ' + p.name + '.');
+      toast('+' + qty + ' un. de ' + p.name + (v ? ' (' + v + ')' : '') + '.');
     });
   }
 
@@ -703,13 +920,19 @@
     });
   }
 
+  function variantOptions(p, current) {
+    if (!p || !SHOP.hasOptions(p)) return '<option value=""></option>';
+    return p.variants.map(function (o) { return '<option value="' + esc(o.name) + '"' + (o.name === current ? ' selected' : '') + '>' + esc(o.name) + ' (' + (o.stock || 0) + ')</option>'; }).join('');
+  }
   function itemRow(item) {
-    item = item || { productId: '', qty: 1, price: '' };
+    item = item || { productId: '', variant: '', qty: 1, price: '' };
+    var p = item.productId && product(item.productId), opts = p && SHOP.hasOptions(p);
     return '<div class="items__row">' +
       '<select name="productId" aria-label="Produto" required><option value="">Escolha o produto…</option>' +
         db.products.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (p) {
-          return '<option value="' + p.id + '"' + (p.id === item.productId ? ' selected' : '') + '>' + esc(p.name) + ' (' + p.stock + ' em estoque)</option>';
+          return '<option value="' + p.id + '"' + (p.id === item.productId ? ' selected' : '') + '>' + esc(p.name) + ' (' + totalStock(p) + ' em estoque)</option>';
         }).join('') + '</select>' +
+      '<select name="variant" aria-label="Opção"' + (opts ? '' : ' class="is-hidden"') + '>' + variantOptions(p, item.variant) + '</select>' +
       '<input name="qty" type="number" min="1" step="1" value="' + item.qty + '" aria-label="Quantidade" required>' +
       '<input name="price" ' + money + ' value="' + item.price + '" aria-label="Preço unitário" required>' +
       '<button type="button" class="link link--danger" data-remove-item aria-label="Remover item">✕</button></div>';
@@ -727,31 +950,32 @@
       '<div class="field field--full"><span>Itens <small>(produto · qtd. · preço un.)</small></span><div class="items" id="items">' +
         items.map(itemRow).join('') + '</div>' +
         '<button type="button" class="link" id="add-item" style="justify-self:start">+ Adicionar item</button></div>' +
-      '<label class="field"><span>Pagamento</span><select name="payment">' + PAYMENTS.map(function (p) { return opt(p, p, base.payment); }).join('') + '</select></label>' +
+      '<label class="field"><span>Pagamento</span><select name="payment">' + (PAYMENTS.indexOf(base.payment) === -1 ? [base.payment] : []).concat(PAYMENTS).map(function (p) { return opt(p, p, base.payment); }).join('') + '</select></label>' +
       '<label class="field"><span>Status</span><select name="status">' + opt('pago', 'Pago', base.status) + opt('pendente', 'A receber', base.status) + '</select></label>' +
       field('Desconto (R$)', 'discount', base.discount || '', money) +
       '</div><div class="total-box"><span>Total</span><b id="sale-total">R$ 0,00</b></div>' + foot(isNew ? 'Registrar venda' : 'Salvar'),
     function (fd) {
-      var productIds = fd.getAll('productId'), qtys = fd.getAll('qty'), prices = fd.getAll('price');
+      var productIds = fd.getAll('productId'), variants = fd.getAll('variant'), qtys = fd.getAll('qty'), prices = fd.getAll('price');
       var newItems = productIds.map(function (id, i) {
-        var p = product(id);
-        return { productId: id, name: p ? p.name : '', qty: parseInt(qtys[i], 10) || 0, price: num(prices[i]), cost: p ? p.cost : 0 };
+        var p = product(id), v = p && SHOP.hasOptions(p) ? variants[i] || p.variants[0].name : '';
+        return { productId: id, name: p ? p.name : '', variant: v, category: p ? p.category : '', qty: parseInt(qtys[i], 10) || 0, price: num(prices[i]), cost: p ? p.cost || 0 : 0 };
       }).filter(function (i) { return i.productId && i.qty > 0; });
       if (!newItems.length) { toast('Adicione pelo menos um item.'); return false; }
 
       // devolve o estoque da versão antiga antes de conferir a nova
-      if (!isNew) s.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock += i.qty; });
+      if (!isNew) s.items.forEach(function (i) { adjustStock(i.productId, i.variant, i.qty); });
       var need = {};
-      newItems.forEach(function (i) { need[i.productId] = (need[i.productId] || 0) + i.qty; });
-      var short = Object.keys(need).filter(function (id) { return product(id).stock < need[id]; });
-      if (short.length && !confirm('Estoque insuficiente para: ' + short.map(function (id) { return product(id).name; }).join(', ') + '.\nRegistrar mesmo assim?')) {
-        if (!isNew) s.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock -= i.qty; });
+      newItems.forEach(function (i) { var k = i.productId + '|' + i.variant; need[k] = (need[k] || 0) + i.qty; });
+      var short = Object.keys(need).filter(function (k) { var p = k.split('|'); return stockOf(p[0], p[1]) < need[k]; });
+      if (short.length && !confirm('Estoque insuficiente para: ' + short.map(function (k) { var p = k.split('|'); return product(p[0]).name + (p[1] ? ' (' + p[1] + ')' : ''); }).join(', ') + '.\nRegistrar mesmo assim?')) {
+        if (!isNew) s.items.forEach(function (i) { adjustStock(i.productId, i.variant, -i.qty); });
         return false;
       }
-      newItems.forEach(function (i) { product(i.productId).stock -= i.qty; });
+      newItems.forEach(function (i) { adjustStock(i.productId, i.variant, -i.qty); });
 
       var cid = fd.get('customerId');
-      var data = { date: fd.get('date'), customerId: cid === '__new' ? '' : cid, payment: fd.get('payment'), status: fd.get('status'), discount: num(fd.get('discount')), items: newItems };
+      var data = { date: fd.get('date'), customerId: cid === '__new' ? '' : cid, payment: fd.get('payment'), status: fd.get('status'), discount: num(fd.get('discount')), items: newItems,
+        channel: s && s.channel ? s.channel : 'balcao' };
       if (isNew) db.sales.push(Object.assign({ id: uid('v'), createdAt: Date.now() }, data)); else Object.assign(s, data);
       toast(isNew ? 'Venda registrada: ' + brl(saleTotal(data)) : 'Venda atualizada.');
     });
@@ -767,8 +991,14 @@
     modalForm.oninput = updateTotal;
     modalForm.onchange = function (e) {
       if (e.target.name === 'productId') {
-        var p = product(e.target.value);
-        if (p) $('[name=price]', e.target.parentNode).value = sellPrice(p);
+        var p = product(e.target.value), row = e.target.parentNode, vs = $('[name=variant]', row);
+        vs.innerHTML = variantOptions(p, '');
+        vs.classList.toggle('is-hidden', !(p && SHOP.hasOptions(p)));
+        if (p) $('[name=price]', row).value = sellPrice(p, vs.value);
+      }
+      if (e.target.name === 'variant') {
+        var pv = product($('[name=productId]', e.target.parentNode).value);
+        if (pv) $('[name=price]', e.target.parentNode).value = sellPrice(pv, e.target.value);
       }
       if (e.target.name === 'customerId' && e.target.value === '__new') {
         var current = readDraft();
@@ -790,9 +1020,78 @@
       var fd = new FormData(modalForm);
       return {
         date: fd.get('date'), customerId: '', payment: fd.get('payment'), status: fd.get('status'), discount: num(fd.get('discount')),
-        items: fd.getAll('productId').map(function (id, i) { return { productId: id, qty: parseInt(fd.getAll('qty')[i], 10) || 1, price: fd.getAll('price')[i] }; })
+        items: fd.getAll('productId').map(function (id, i) { return { productId: id, variant: fd.getAll('variant')[i] || '', qty: parseInt(fd.getAll('qty')[i], 10) || 1, price: fd.getAll('price')[i] }; })
       };
     }
+  }
+
+  // ---------- demonstração ----------
+  var DEMO_NAMES = ['Ana Paula Souza', 'Beatriz Lima', 'Camila Rocha', 'Daniela Martins', 'Eduarda Alves', 'Fernanda Costa',
+    'Gabriela Nunes', 'Helena Ribeiro', 'Isabela Freitas', 'Juliana Mendes', 'Karina Duarte', 'Larissa Gomes'];
+  function clearDemo() {
+    ['customers', 'sales', 'orders', 'coupons'].forEach(function (col) { db[col] = (db[col] || []).filter(function (x) { return !x.demo; }); });
+  }
+  function loadDemo() {
+    clearDemo();
+    var prods = db.products.filter(function (p) { return totalStock(p) > 0 || SHOP.hasOptions(p); });
+    if (!prods.length) prods = db.products;
+    var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    var pick = function (list) { return list[Math.floor(rnd() * list.length)]; };
+    var customers = DEMO_NAMES.map(function (n, i) {
+      return { id: 'demo-c' + i, demo: true, name: n, phone: '(42) 9' + (8800 + i * 37) + '-' + (1000 + i * 413), neighborhood: pick(['Centro', 'Vila Nova', 'Jardim América', 'Santa Rita']), notes: 'Cliente de demonstração' };
+    });
+    db.customers = db.customers.concat(customers);
+    function line(p) {
+      var v = SHOP.hasOptions(p) ? pick(p.variants).name : '', price = sellPrice(p, v);
+      return { productId: p.id, name: p.name, variant: v, category: p.category, qty: rnd() < 0.85 ? 1 : 2, price: price, cost: p.cost || round(price * 0.5) };
+    }
+    var t = window.JMPainel.todayDate(), sales = [];
+    for (var d = 150; d >= 0; d--) {
+      var dt = new Date(t.getFullYear(), t.getMonth(), t.getDate() - d), w = [0.5, 0.9, 1, 1, 1.1, 1.3, 1.5][dt.getDay()];
+      var n = Math.floor(rnd() * 3.2 * w + rnd());
+      for (var k = 0; k < n; k++) {
+        var items = [line(pick(prods))]; if (rnd() < 0.3) items.push(line(pick(prods)));
+        var site = rnd() < 0.35, gross = items.reduce(function (a, i) { return a + i.qty * i.price; }, 0);
+        sales.push({ id: 'demo-v' + d + '-' + k, demo: true, createdAt: dt.getTime() + k, date: window.JMPainel.iso(dt),
+          customerId: rnd() < 0.65 ? pick(customers).id : '', channel: site ? 'site' : 'balcao',
+          payment: pick(['PIX', 'PIX', 'PIX', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro']),
+          status: d < 20 && rnd() < 0.15 ? 'pendente' : 'pago', discount: site && rnd() < 0.15 ? round(gross * 0.1) : 0, items: items });
+      }
+    }
+    db.sales = db.sales.concat(sales);
+    db.coupons = db.coupons.concat([{ id: 'DEMO10', demo: true, code: 'DEMO10', type: 'percent', value: 10, minOrder: 0, active: true }]);
+    if (cloud) {
+      var steps = [['novo', 0], ['novo', 0], ['confirmado', 1], ['enviado', 1], ['retirar', 2], ['entregue', 3], ['entregue', 4]];
+      steps.forEach(function (st, i) {
+        var c = customers[i], when = new Date(Date.now() - st[1] * 864e5 - i * 3600e3), items = [line(pick(prods))];
+        var pickup = i % 2 === 0, total = items.reduce(function (a, x) { return a + x.qty * x.price; }, 0) + (pickup ? 0 : 8);
+        var o = { id: 'demo-o' + i, demo: true, code: 'JM-DEMO' + (i + 1), uid: 'demo', status: st[0], createdAt: firebase.firestore.Timestamp.fromDate(when),
+          customer: { name: c.name, phone: c.phone, email: '' }, items: items.map(function (x) { return { productId: x.productId, name: x.name, variant: x.variant, category: x.category, qty: x.qty, price: x.price }; }),
+          subtotal: total - (pickup ? 0 : 8), coupon: null, payment: i % 3 === 0 ? 'Cartão (na entrega ou retirada)' : 'PIX', notes: i === 1 ? 'É presente, pode embrulhar?' : '', total: total, channel: 'site',
+          delivery: pickup ? { type: 'pickup', fee: 0, address: 'Retirada na loja' } : { type: 'delivery', fee: 8, zone: 'Centro', neighborhood: c.neighborhood, address: 'Rua das Flores, ' + (100 + i) + ' — ' + c.neighborhood } };
+        if (st[0] === 'entregue') o.finishedAt = firebase.firestore.Timestamp.fromDate(new Date(when.getTime() + 864e5));
+        if (i === 6) o['return'] = { status: 'solicitada', reason: 'Produto com defeito', details: 'A tampa veio quebrada', requestedAt: firebase.firestore.Timestamp.now() };
+        db.orders.push(o);
+      });
+    }
+    if (!settings().goal) settings().goal = 15000;
+    return sales.length;
+  }
+
+  function launchForm() {
+    var counts = { products: db.products.length, sales: db.sales.length, orders: (db.orders || []).length, customers: db.customers.length, coupons: db.coupons.length, categories: db.categories.length };
+    var box = function (k, label, on) { return '<label class="check field--full"><input type="checkbox" name="wipe" value="' + k + '"' + (on ? ' checked' : '') + '> ' + label + ' <span class="muted">(' + counts[k] + ')</span></label>'; };
+    openModal('<h2>Preparar para o lançamento</h2><p>Escolha o que apagar. Isso não pode ser desfeito, então baixe um backup antes se quiser guardar alguma coisa.</p><div class="fields">' +
+      box('products', 'Produtos (inclusive os de exemplo)', true) + box('sales', 'Vendas', true) + box('orders', 'Pedidos do site', true) + box('customers', 'Clientes', true) +
+      box('coupons', 'Cupons', false) + box('categories', 'Categorias', false) +
+      field('Para confirmar, digite LANÇAR', 'confirm', '', 'autocomplete="off" required', true) + '</div>' +
+      '<div class="modal__foot"><button class="btn btn--ghost" value="cancel" formnovalidate>Cancelar</button><button class="btn btn--danger" value="ok">Apagar e preparar</button></div>', function (fd) {
+      if (String(fd.get('confirm')).trim().toUpperCase() !== 'LANÇAR' && String(fd.get('confirm')).trim().toUpperCase() !== 'LANCAR') { toast('Digite LANÇAR para confirmar.'); return false; }
+      var wipe = fd.getAll('wipe');
+      wipe.forEach(function (k) { db[k] = []; });
+      settings().launched = Date.now();
+      toast('Pronto! A loja está limpa para começar as vendas.');
+    });
   }
 
   // ---------- ações ----------
@@ -811,13 +1110,42 @@
     'delete-sale': function (id) {
       var s = db.sales.find(function (s) { return s.id === id; });
       if (!confirm('Excluir esta venda de ' + brl(saleTotal(s)) + '? Os produtos voltam para o estoque.')) return;
-      s.items.forEach(function (i) { var p = product(i.productId); if (p) p.stock += i.qty; });
+      s.items.forEach(function (i) { adjustStock(i.productId, i.variant, i.qty); });
       db.sales = db.sales.filter(function (x) { return x !== s; });
       var o = orderOfSale(id);
       if (o) delete o.saleId;
       save(); render(); toast('Venda excluída.');
     },
     'new-product': function () { productForm(null); },
+    'duplicate-product': function (id) {
+      var src = product(id), copy = JSON.parse(JSON.stringify(src));
+      copy.id = uid('p'); copy.name = src.name + ' (cópia)'; copy.slug = uniqueSlug(copy.name, copy.id); copy.createdAt = Date.now(); copy.featured = false; copy.stock = 0;
+      if (SHOP.hasOptions(copy)) copy.variants.forEach(function (o) { o.stock = 0; });
+      db.products.push(copy); save(); render();
+      productForm(copy);
+      toast('Cópia criada. Ajuste o nome, as opções e o estoque.');
+    },
+    'new-category': function () { categoryForm(null); },
+    'rename-category': function (id) { categoryForm(db.categories.find(function (c) { return c.id === id; })); },
+    'delete-category': function (id) {
+      var c = db.categories.find(function (c) { return c.id === id; }), n = db.products.filter(function (p) { return p.category === id; }).length;
+      if (n) { toast('Mova os ' + n + ' produto(s) de "' + c.name + '" para outra categoria antes de excluir.'); return; }
+      if (!confirm('Excluir a categoria ' + c.name + '?')) return;
+      db.categories = db.categories.filter(function (x) { return x !== c; });
+      save(); render(); toast('Categoria excluída.');
+    },
+    'cat-up': function (id) { moveCategory(id, -1); },
+    'cat-down': function (id) { moveCategory(id, 1); },
+    'demo-load': function () {
+      if (!db.products.length) { toast('Cadastre pelo menos um produto antes de carregar a demonstração.'); return; }
+      if (!confirm('Carregar dados de demonstração? Eles ficam marcados e podem ser tirados depois. O estoque não muda.')) return;
+      var n = loadDemo(); save(); render(); toast('Demonstração carregada: ' + n + ' vendas fictícias.');
+    },
+    'demo-clear': function () {
+      if (!confirm('Tirar todos os dados de demonstração?')) return;
+      clearDemo(); save(); render(); toast('Dados de demonstração removidos.');
+    },
+    launch: function () { launchForm(); },
     'edit-product': function (id) { productForm(product(id)); },
     restock: function (id) { restockForm(product(id)); },
     'delete-product': function (id) {
@@ -875,7 +1203,7 @@
       save(); render(); toast('Cliente excluído.');
     },
     export: function () {
-      var data = { products: db.products, customers: db.customers, sales: db.sales, coupons: db.coupons };
+      var data = { products: db.products, customers: db.customers, sales: db.sales, coupons: db.coupons, categories: db.categories, settings: db.settings };
       var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -889,7 +1217,17 @@
     }
   };
 
+  function moveCategory(id, dir) {
+    var list = cats();
+    list.forEach(function (c, i) { c.order = i; });
+    var i = list.findIndex(function (c) { return c.id === id; }), j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    var a = list[i].order; list[i].order = list[j].order; list[j].order = a;
+    save(); render();
+  }
+
   app.addEventListener('click', function (e) {
+    if (e.target.closest('[data-only-stale]')) { filters.produtos.sit = 'parados'; }
     var el = e.target.closest('[data-action]');
     if (!el || el.tagName === 'INPUT' || !ACTIONS[el.dataset.action]) return;
     ACTIONS[el.dataset.action](el.dataset.id);
@@ -907,6 +1245,14 @@
   });
 
   app.addEventListener('change', function (e) {
+    var cf = e.target.dataset.catFeatured;
+    if (cf) {
+      var cat = db.categories.find(function (c) { return c.id === cf; });
+      if (e.target.checked && db.categories.filter(function (c) { return c.featured; }).length >= 3) { e.target.checked = false; toast('A vitrine mostra no máximo 3 categorias.'); return; }
+      cat.featured = e.target.checked; save(); render();
+      toast(cat.featured ? cat.name + ' aparece na vitrine.' : cat.name + ' saiu da vitrine.');
+      return;
+    }
     var oid = e.target.dataset.orderStatus;
     if (oid) {
       var o = db.orders.find(function (o) { return o.id === oid; });
@@ -927,8 +1273,7 @@
         if (!Array.isArray(data.products) || !Array.isArray(data.sales) || !Array.isArray(data.customers)) throw new Error();
         if (!confirm('Substituir os dados atuais por este backup?')) return;
         data.coupons = data.coupons || [];
-        data.products.forEach(enrich);
-        db = keepCloud(data); save(); render(); toast('Backup importado.');
+        db = keepCloud(data); ensureBasics(); save(); render(); toast('Backup importado.');
       } catch (err) { toast('Arquivo de backup inválido.'); }
     };
     reader.readAsText(e.target.files[0]);
@@ -937,8 +1282,8 @@
   window.addEventListener('hashchange', function () { render(); app.focus(); });
   if (!cloud) {
     db = loadLocal() || seed();
-    db.orders = [];
-    db.products.forEach(enrich);
+    db.orders = []; db.catalog = [];
+    ensureBasics();
     render();
   } else {
     gate('<p>Carregando…</p>');
