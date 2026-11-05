@@ -369,3 +369,12 @@ td .sub { display: block; font-size: .82rem; color: var(--brown-2); }
 .theme-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .bar .acct__btn { color: var(--bar-ink); }
 @media (max-width: 760px) { .bar__in { flex-wrap: wrap; } .nav { order: 3; flex-basis: 100%; } .bar .acct, .bar #account { margin-left: auto; } }
+.auto { background: var(--card); border: 1px solid var(--pastel); border-radius: var(--r-lg); padding: .7rem 1rem; margin-bottom: 1rem; }
+.auto summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: baseline; }
+.auto summary .muted { font-size: .85rem; }
+.auto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .8rem 1.2rem; margin-top: .8rem; }
+.auto-item { display: flex; gap: .6rem; align-items: flex-start; font-size: .92rem; }
+.auto-item > input { margin-top: .25rem; width: 1.05rem; height: 1.05rem; accent-color: var(--malva-ink); flex: none; }
+.auto-item small { display: block; color: var(--brown-2); font-size: .82rem; margin-top: .1rem; }
+.auto-item small input { width: 3.2rem; border: 1px solid var(--rosa); background: var(--field); color: inherit; border-radius: 6px; padding: .05rem .3rem; }
+.order__flags { margin: .4rem 0 0; display: flex; gap: .35rem; flex-wrap: wrap; }

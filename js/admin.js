@@ -21,6 +21,8 @@
   var DEFAULT_CATS = (window.JM_CATEGORIES || []).map(function (c, i) { return { id: c.slug, name: c.name, order: i, featured: i < 3 }; });
   var PAYMENTS = ['PIX', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro', 'Fiado'];
   var DEFAULT_SETTINGS = { id: 'loja', goal: 0, staleDays: 30 };
+  // Automações do servidor (functions/index.js); padrões iguais aos de lá.
+  var AUTO_DEFAULTS = { autoConfirm: false, lembretePix: true, autoCancelDays: 3, alertaEstoque: true, resumoDiario: true };
   var app = document.getElementById('app');
   var modal = document.getElementById('modal');
   var modalForm = document.getElementById('modal-form');
@@ -449,6 +451,7 @@
       db.sales = db.sales.filter(function (x) { return x !== sale; });
     }
     delete o.saleId;
+    o.reserved = false;
   }
   function orderMillis(o) { return o.createdAt && o.createdAt.toMillis ? o.createdAt.toMillis() : 0; }
   function orderWhen(o) {
@@ -472,7 +475,7 @@
     }).sort(function (a, b) { return orderMillis(b) - orderMillis(a); });
     return '' +
       '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
-      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '<div class="push-card" id="push-card"><b>Avisos de pedido neste aparelho</b><span class="muted">Verificando…</span></div>') +
+      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '<div class="push-card" id="push-card"><b>Avisos de pedido neste aparelho</b><span class="muted">Verificando…</span></div>' + autoPanel()) +
       '<div class="toolbar"><select data-filter="pedidos.status" aria-label="Status">' +
         opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) + opt('devolucoes', 'Devoluções', f.status) +
         ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
@@ -486,6 +489,8 @@
             '<p class="muted">' + orderWhen(o) + ' · <b>' + esc(o.customer.name) + '</b>' +
             (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(o.customer.phone) + '</a>' : '') + '</p></div>' +
             '<b class="order__total">' + brl(o.total) + '</b></header>' +
+          (o.reserved && !o.saleId ? '<p class="order__flags"><span class="pill pill--ok">Estoque reservado</span>' + (o.autoConfirmed ? ' <span class="pill pill--neutral">Confirmado automaticamente</span>' : '') + '</p>' : '') +
+          (o.status === 'cancelado' && o.autoCancelled ? '<p class="order__flags"><span class="pill pill--warn">Cancelado automaticamente: PIX não pago</span></p>' : '') +
           '<ul class="order__items">' + o.items.map(function (i) {
             return '<li>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' <span class="muted">' + brl(i.price * i.qty) + '</span></li>';
           }).join('') + '</ul>' +
@@ -500,6 +505,22 @@
       }).join('') + '</div>' : '<p class="empty">Nenhum pedido aqui.</p>');
   }
 
+  function autoPanel() {
+    var a = Object.assign({}, AUTO_DEFAULTS, settings());
+    var box = function (k, label, hint) {
+      return '<label class="auto-item"><input type="checkbox" data-auto="' + k + '"' + (a[k] ? ' checked' : '') + '><span><b>' + label + '</b><small>' + hint + '</small></span></label>';
+    };
+    return '<details class="auto"' + (filters.pedidos.autoOpen ? ' open' : '') + '><summary><b>Automações</b> <span class="muted">' +
+        [a.autoConfirm ? 'confirmação automática' : '', a.lembretePix ? 'lembrete de PIX' : '', a.autoCancelDays > 0 ? 'cancelamento em ' + a.autoCancelDays + ' dia(s)' : '', a.alertaEstoque ? 'estoque baixo' : '', a.resumoDiario ? 'resumo às 8h' : ''].filter(Boolean).join(' · ') + '</span></summary>' +
+      '<div class="auto-grid">' +
+        box('autoConfirm', 'Confirmar pedidos automaticamente', 'Se todos os itens tiverem estoque, o pedido vira "Confirmado" e o estoque fica reservado. Se faltar algo, você recebe um aviso.') +
+        box('lembretePix', 'Lembrar o PIX', 'Pedido confirmado e não pago: lembrete ao cliente em 24 h e aviso para você em 48 h.') +
+        '<label class="auto-item"><input type="checkbox" data-auto="cancelOn"' + (a.autoCancelDays > 0 ? ' checked' : '') + '><span><b>Cancelar PIX não pago</b><small>Pedido confirmado e sem PIX depois de <input type="number" min="1" max="30" step="1" data-auto="autoCancelDays" value="' + (a.autoCancelDays > 0 ? a.autoCancelDays : 3) + '" aria-label="Dias"> dia(s) é cancelado, o estoque volta e o cliente é avisado. Cartão na entrega não entra.</small></span></label>' +
+        box('alertaEstoque', 'Avisar estoque baixo', 'E-mail e notificação quando um produto chega no mínimo ou esgota.') +
+        box('resumoDiario', 'Resumo diário às 8h', 'E-mail com pedidos para confirmar e entregar, vendas de ontem, fiado e estoque baixo.') +
+      '</div><p class="muted" style="font-size:.82rem;margin:.4rem 0 0">Os e-mails saem de ' + 'jmstore403@gmail.com' + '. Pedidos de demonstração não disparam nada.</p></details>';
+  }
+
   function returnBox(o) {
     var r = o['return'];
     if (!r) return '';
@@ -510,6 +531,23 @@
       (r.status === 'solicitada' ? '<div class="return__btns">' + btn('return-approve', 'Aprovar devolução') + btn('return-refuse', 'Recusar', 'btn--danger') + '</div>' : '') +
       (r.status === 'aprovada' ? '<div class="return__btns">' + btn('return-done', 'Produto recebido e reembolso feito') + '</div>' : '') +
       '</div>';
+  }
+
+  // Pedido confirmado segura o estoque (reserva); cancelar sem venda lançada devolve.
+  function reserveOrder(o) {
+    if (o.reserved || o.saleId) return true;
+    var need = {};
+    o.items.forEach(function (i) { var k = i.productId + '|' + (i.variant || ''); need[k] = (need[k] || 0) + i.qty; });
+    var short = Object.keys(need).filter(function (k) { var p = k.split('|'); return stockOf(p[0], p[1]) < need[k]; });
+    if (short.length && !confirm('Falta estoque para: ' + short.map(function (k) { var p = k.split('|'), pr = product(p[0]); return (pr ? pr.name : 'produto excluído') + (p[1] ? ' (' + p[1] + ')' : ''); }).join(', ') + '.\nConfirmar mesmo assim?')) return false;
+    o.items.forEach(function (i) { adjustStock(i.productId, i.variant, -i.qty); });
+    o.reserved = true;
+    return true;
+  }
+  function releaseOrder(o) {
+    if (!o.reserved || o.saleId) return;
+    o.items.forEach(function (i) { adjustStock(i.productId, i.variant, i.qty); });
+    o.reserved = false;
   }
 
   // Transforma um pedido do site em venda: cadastra/acha o cliente e dá baixa no estoque.
@@ -530,7 +568,8 @@
         return { productId: i.productId, name: p ? p.name : i.name, variant: i.variant || '', category: i.category || (p ? p.category : ''), qty: i.qty, price: i.price, cost: p ? p.cost || 0 : 0 };
       })
     };
-    sale.items.forEach(function (i) { adjustStock(i.productId, i.variant, -i.qty); });
+    // Se o pedido já reservou o estoque, a venda não baixa de novo.
+    if (!o.reserved) sale.items.forEach(function (i) { adjustStock(i.productId, i.variant, -i.qty); });
     db.sales.push(sale);
     o.saleId = sale.id;
     if (o.status === 'novo') o.status = 'confirmado';
@@ -1140,7 +1179,7 @@
       s.items.forEach(function (i) { adjustStock(i.productId, i.variant, i.qty); });
       db.sales = db.sales.filter(function (x) { return x !== s; });
       var o = orderOfSale(id);
-      if (o) delete o.saleId;
+      if (o) { delete o.saleId; o.reserved = false; }
       save(); render(); toast('Venda excluída.');
     },
     'new-product': function () { productForm(null); },
@@ -1272,6 +1311,21 @@
   });
 
   app.addEventListener('change', function (e) {
+    var ak = e.target.dataset.auto;
+    if (ak) {
+      var st = settings(), label = '';
+      if (ak === 'cancelOn') { st.autoCancelDays = e.target.checked ? Math.max(1, parseInt($('[data-auto=autoCancelDays]').value, 10) || 3) : 0; label = e.target.checked ? 'Cancelamento automático ligado.' : 'Cancelamento automático desligado.'; }
+      else if (ak === 'autoCancelDays') {
+        var dd = Math.min(30, Math.max(1, parseInt(e.target.value, 10) || 3));
+        var atual = st.autoCancelDays === undefined ? AUTO_DEFAULTS.autoCancelDays : st.autoCancelDays;
+        if (atual > 0) st.autoCancelDays = dd;
+        label = 'Cancelar PIX não pago depois de ' + dd + ' dia(s).';
+      }
+      else { st[ak] = e.target.checked; label = e.target.checked ? 'Automação ligada.' : 'Automação desligada.'; }
+      filters.pedidos.autoOpen = true;
+      save(); render(); toast(label);
+      return;
+    }
     var cf = e.target.dataset.catFeatured;
     if (cf) {
       var cat = db.categories.find(function (c) { return c.id === cf; });
@@ -1283,11 +1337,15 @@
     var oid = e.target.dataset.orderStatus;
     if (oid) {
       var o = db.orders.find(function (o) { return o.id === oid; });
-      if (e.target.value === 'entregue') {
-        if (!o.saleId && !confirm('Finalizar o pedido #' + o.code + '? A venda será lançada como paga e o estoque vai baixar.')) { render(); return; }
+      var v = e.target.value;
+      if (v === 'entregue') {
+        if (!o.saleId && !o.reserved && !confirm('Finalizar o pedido #' + o.code + '? A venda será lançada como paga e o estoque vai baixar.')) { render(); return; }
         finishOrder(o);
+      } else if (v === 'cancelado' || v === 'novo') {
+        releaseOrder(o); o.status = v;
       } else {
-        o.status = e.target.value;
+        if (!reserveOrder(o)) { render(); return; }
+        o.status = v;
       }
       save(); render(); toast('Pedido #' + o.code + ': ' + e.target.selectedOptions[0].textContent + '.');
       return;
