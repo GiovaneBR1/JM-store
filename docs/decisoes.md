@@ -24,6 +24,15 @@ Lista do que já foi combinado e do que ainda está em aberto. Nada daqui foi ap
 - Botão na gestão **"Preparar para o lançamento"**: apaga produtos de exemplo, vendas, pedidos e clientes de teste (com opção de manter cupons e categorias).
 - Bom para a apresentação e o treinamento da dona: primeiro usa com dados de exemplo, depois zera.
 
+### Painel financeiro e relatórios
+Protótipo: https://claude.ai/artifact/H9Pjm7ZQLC4VJCTHMRHxvF
+
+- escolha de período (este mês, mês passado, últimos 3 meses, este ano, ano passado, meses à escolha) com comparação automática; faturamento, lucro, vendas e ticket médio com variação; gráfico de faturamento e lucro no tempo (com versão em tabela); categorias com faturamento, lucro, margem e crescimento; variação de preço por categoria; mais vendidos; formas de pagamento; site x balcão.
+  - Também no protótipo: **meta do mês** (andamento, projeção e onde deveria estar hoje), **melhores clientes**, **produtos parados** (sem venda há mais de 30 dias, com o valor parado em estoque) — com a situação aparecendo também na tela de Produtos — e o botão **Exportar relatório**.
+  - **Relatório exportado (.xlsx):** modelo em `docs/relatorio-modelo.xlsx` (dados simulados de outubro de 2026), com as abas Resumo, Vendas, Itens, Categorias, Produtos, Clientes e Pagamentos. Tudo por fórmula: trocar as datas, a meta ou o prazo de "parado" no Resumo recalcula a planilha.
+  - **Relatório em PDF:** modelo em `docs/relatorio-modelo.pdf` (mesmos dados da planilha), em 2 páginas A4: números do mês com comparação, meta, gráfico diário de faturamento e lucro, destaques escritos automaticamente, categorias, mais vendidos, melhores clientes, pagamentos e canal, produtos parados e valores a receber. Pensado para mandar no WhatsApp ou imprimir; na gestão, sairia pelo botão Exportar (escolhendo PDF ou planilha).
+  - Para funcionar com dados reais: gravar a **categoria** em cada item vendido (hoje só fica o produto) e o **canal** da venda (site ou balcão). O preço e o custo de cada venda já são gravados.
+
 ## Em aberto
 
 - [ ] **Texto da seção "Nossos produtos":** a sugestão não chegou na conversa.
@@ -32,12 +41,6 @@ Lista do que já foi combinado e do que ainda está em aberto. Nada daqui foi ap
 - [ ] **Opções e medidas do produto** (50 ml / 100 ml, cores, g, mg…): definir o formato (ver proposta abaixo).
 - [ ] **Facilidades de cadastro:** planilha, edição direto na tabela, "Salvar e cadastrar outro", "Duplicar", foto pela câmera — escolher quais entram.
 - [ ] **Dados de demonstração:** botão que preenche a gestão com clientes, pedidos, vendas e cupons fictícios, para testar e treinar (e depois "Preparar para o lançamento" zera tudo).
-
-- [ ] **Novo Painel financeiro** (protótipo: https://claude.ai/artifact/H9Pjm7ZQLC4VJCTHMRHxvF): escolha de período (este mês, mês passado, últimos 3 meses, este ano, ano passado, meses à escolha) com comparação automática; faturamento, lucro, vendas e ticket médio com variação; gráfico de faturamento e lucro no tempo (com versão em tabela); categorias com faturamento, lucro, margem e crescimento; variação de preço por categoria; mais vendidos; formas de pagamento; site x balcão.
-  - Também no protótipo: **meta do mês** (andamento, projeção e onde deveria estar hoje), **melhores clientes**, **produtos parados** (sem venda há mais de 30 dias, com o valor parado em estoque) — com a situação aparecendo também na tela de Produtos — e o botão **Exportar relatório**.
-  - **Relatório exportado (.xlsx):** modelo em `docs/relatorio-modelo.xlsx` (dados simulados de outubro de 2026), com as abas Resumo, Vendas, Itens, Categorias, Produtos, Clientes e Pagamentos. Tudo por fórmula: trocar as datas, a meta ou o prazo de "parado" no Resumo recalcula a planilha.
-  - **Relatório em PDF:** modelo em `docs/relatorio-modelo.pdf` (mesmos dados da planilha), em 2 páginas A4: números do mês com comparação, meta, gráfico diário de faturamento e lucro, destaques escritos automaticamente, categorias, mais vendidos, melhores clientes, pagamentos e canal, produtos parados e valores a receber. Pensado para mandar no WhatsApp ou imprimir; na gestão, sairia pelo botão Exportar (escolhendo PDF ou planilha).
-  - Para funcionar com dados reais: gravar a **categoria** em cada item vendido (hoje só fica o produto) e o **canal** da venda (site ou balcão). O preço e o custo de cada venda já são gravados.
 
 ### Ideias para as fotos
 1. **Fundo removido no próprio site:** ao enviar a foto, o fundo é retirado automaticamente e o produto é colocado num fundo padrão da loja (nude/vinho claro), com sombra suave. Todas as fotos ficam com o mesmo padrão. Existem bibliotecas gratuitas que fazem isso no navegador, sem custo por foto (conferir a licença antes de usar).
@@ -49,3 +52,13 @@ Lista do que já foi combinado e do que ainda está em aberto. Nada daqui foi ap
 - **Conteúdo** do produto: quantidade + unidade (ml, L, g, kg, mg, un.). Ex.: "100 ml", "30 g".
 - **Opções** (quando houver): cada uma com **nome** (ex.: "50 ml", "Malva", "Tom 03"), **preço** e **estoque próprios**.
 - Na loja, o cliente escolhe a opção e vê o preço e o estoque dela; a venda baixa o estoque da opção certa.
+
+## Ideias para a v2
+
+Não entram na v1. Ficam anotadas para depois que a loja estiver vendendo pelo site por alguns meses.
+
+- **Confirmação automática do PIX:** o site gera um QR Code de PIX para cada pedido, com o valor e o número do pedido; quando o cliente paga, o pedido vira "Pago" sozinho. Mais simples e barato que Open Finance para o mesmo objetivo. Depende de CNPJ e do banco/plataforma que a loja usar (perguntar à dona).
+- **Pagamento online completo** (PIX e cartão no site) por um gateway, se as vendas online crescerem.
+- **Mensagens automáticas no WhatsApp** (API oficial da Meta) a cada mudança de status do pedido, para o cliente e para a loja. Precisa de número dedicado e conta Meta Business.
+- As três precisam de uma parte em servidor (Cloud Functions, plano Blaze do Firebase com cartão cadastrado). A estrutura de pedidos com status da v1 já serve de base.
+- **Open Finance:** só faria sentido para conciliar várias contas ou crédito; não é prioridade.
