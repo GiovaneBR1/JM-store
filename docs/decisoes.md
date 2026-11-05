@@ -33,6 +33,9 @@ Lista do que já foi combinado e do que ainda está em aberto. Nada daqui foi ap
 - [ ] **Facilidades de cadastro:** planilha, edição direto na tabela, "Salvar e cadastrar outro", "Duplicar", foto pela câmera — escolher quais entram.
 - [ ] **Dados de demonstração:** botão que preenche a gestão com clientes, pedidos, vendas e cupons fictícios, para testar e treinar (e depois "Preparar para o lançamento" zera tudo).
 
+- [ ] **Novo Painel financeiro** (protótipo: https://claude.ai/artifact/H9Pjm7ZQLC4VJCTHMRHxvF): escolha de período (este mês, mês passado, últimos 3 meses, este ano, ano passado, meses à escolha) com comparação automática; faturamento, lucro, vendas e ticket médio com variação; gráfico de faturamento e lucro no tempo (com versão em tabela); categorias com faturamento, lucro, margem e crescimento; variação de preço por categoria; mais vendidos; formas de pagamento; site x balcão.
+  - Para funcionar com dados reais: gravar a **categoria** em cada item vendido (hoje só fica o produto) e o **canal** da venda (site ou balcão). O preço e o custo de cada venda já são gravados.
+
 ### Ideias para as fotos
 1. **Fundo removido no próprio site:** ao enviar a foto, o fundo é retirado automaticamente e o produto é colocado num fundo padrão da loja (nude/vinho claro), com sombra suave. Todas as fotos ficam com o mesmo padrão. Existem bibliotecas gratuitas que fazem isso no navegador, sem custo por foto (conferir a licença antes de usar).
 2. **App no celular antes de enviar** (Photoroom, Canva, CapCut): fazem fundo de estúdio com IA. Resultado bonito, mas é um passo a mais e as versões completas são pagas.
