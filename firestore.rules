@@ -22,6 +22,8 @@ service cloud.firestore {
     match /customers/{id} { allow read, write: if isAdmin(); }
     match /sales/{id} { allow read, write: if isAdmin(); }
     match /settings/{id} { allow read, write: if isAdmin(); }
+    // Aparelhos da gestão que recebem notificação de pedido (o ID é o token do aparelho).
+    match /adminTokens/{token} { allow read, write: if isAdmin(); }
 
     // Categorias: viram os filtros e a vitrine da loja, então todos leem; só o admin edita.
     match /categories/{id} {

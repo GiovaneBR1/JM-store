@@ -4,3 +4,8 @@ target/
 .idea/
 .vscode/
 .claude/
+functions/node_modules/
+functions/.secret.local
+functions/.env.local
+firebase-debug.log
+firestore-debug.log

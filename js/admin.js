@@ -472,7 +472,7 @@
     }).sort(function (a, b) { return orderMillis(b) - orderMillis(a); });
     return '' +
       '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
-      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '') +
+      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '<div class="push-card" id="push-card"><b>Avisos de pedido neste aparelho</b><span class="muted">Verificando…</span></div>') +
       '<div class="toolbar"><select data-filter="pedidos.status" aria-label="Status">' +
         opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) + opt('devolucoes', 'Devoluções', f.status) +
         ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
@@ -600,7 +600,34 @@
   }
 
   // ---------- roteamento ----------
-  var ROUTES = { '': ['painel', viewPainel, bindPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], categorias: ['categorias', viewCategorias], clientes: ['clientes', viewClientes], pedidos: ['pedidos', viewPedidos], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
+  // Cartão de notificações: mostra a situação deste aparelho e o botão para ativar.
+  var PUSH_TEXT = {
+    config: 'As notificações ainda não foram configuradas: falta a chave pública do Firebase (veja o README).',
+    'ios-install': 'No iPhone, primeiro instale a gestão: toque em Compartilhar → Adicionar à Tela de Início, abra pelo ícone novo e volte aqui.',
+    unsupported: 'Este navegador não recebe notificações. Use o Chrome no Android ou no computador.',
+    denied: 'As notificações estão bloqueadas para este site. Libere nas configurações do navegador e recarregue a página.',
+    off: 'Receba um aviso no celular quando chegar pedido novo ou pedido de devolução.',
+    on: '✓ Ativados. Este aparelho recebe os avisos de pedido novo e de devolução.'
+  };
+  function bindPedidos() {
+    var card = $('#push-card');
+    if (!card || !window.JMPush) return;
+    window.JMPush.status().then(function (st) {
+      if (!$('#push-card')) return;
+      card.innerHTML = '<b>Avisos de pedido neste aparelho</b><span class="muted">' + PUSH_TEXT[st] + '</span>' +
+        (st === 'off' ? '<button class="btn btn--sm" type="button" id="push-on">Ativar avisos neste aparelho</button>' : '') +
+        (st === 'on' ? '<button class="link" type="button" id="push-off">Desativar neste aparelho</button>' : '');
+      var on = $('#push-on'), off = $('#push-off');
+      if (on) on.addEventListener('click', function () {
+        on.disabled = true; on.textContent = 'Ativando…';
+        window.JMPush.enable(AUTH.user.uid).then(function () { toast('Avisos ativados neste aparelho.'); bindPedidos(); },
+          function (e) { toast(e && e.message === 'denied' ? 'Você não permitiu as notificações.' : 'Não foi possível ativar os avisos. Tente de novo.'); bindPedidos(); });
+      });
+      if (off) off.addEventListener('click', function () { window.JMPush.disable().then(function () { toast('Avisos desativados neste aparelho.'); bindPedidos(); }); });
+    });
+  }
+
+  var ROUTES = { '': ['painel', viewPainel, bindPainel], vendas: ['vendas', viewVendas], produtos: ['produtos', viewProdutos], categorias: ['categorias', viewCategorias], clientes: ['clientes', viewClientes], pedidos: ['pedidos', viewPedidos, bindPedidos], cupons: ['cupons', viewCupons], dados: ['dados', viewDados] };
   function route() { return location.hash.replace(/^#\/?/, ''); }
   function render() {
     if (!db) return;
