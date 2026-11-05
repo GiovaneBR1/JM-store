@@ -3,7 +3,10 @@
 
   var C = window.JM_CONFIG;
   var P = window.JM_PRODUCTS; // trocado pelo catálogo da nuvem (gestão) quando disponível
-  var CATS = window.JM_CATEGORIES;
+  var SHOP = window.JMShop;
+  // Categorias da loja: vêm da gestão (nuvem); sem login configurado, usa as do js/products.js.
+  var CATS = (window.JM_CATEGORIES || []).map(function (c, i) { return { id: c.slug, name: c.name, order: i, featured: i < 3 }; });
+  P = (P || []).map(function (p) { return SHOP.normalize(JSON.parse(JSON.stringify(p))); });
   var app = document.getElementById('app');
   var DARK = '#6E412A';
   var AUTH = window.JMAuth;
@@ -37,21 +40,33 @@
   }
   function byId(id) { return P.find(function (p) { return p.id === id; }); }
   function bySlug(s) { return P.find(function (p) { return p.slug === s; }); }
-  function catName(slug) { var c = CATS.find(function (c) { return c.slug === slug; }); return c ? c.name : ''; }
-  function variantExtra(p, v) {
-    var found = (p.variants || []).find(function (x) { return x.name === v; });
-    return found ? found.extra : 0;
+  function catName(slug) { var c = CATS.find(function (c) { return c.id === slug; }); return c ? c.name : ''; }
+  function stockAll(p) { return SHOP.totalStock(p); }
+  // Sem opção escolhida, um produto com opções usa a primeira que tem estoque.
+  function defaultVariant(p) {
+    if (!SHOP.hasOptions(p)) return '';
+    var o = p.variants.find(function (x) { return (x.stock || 0) > 0; }) || p.variants[0];
+    return o.name;
   }
-  function unitPrice(p, v) { return round((p.promoPrice != null ? p.promoPrice : p.price) + variantExtra(p, v)); }
-  function listPrice(p, v) { return round(p.price + variantExtra(p, v)); }
+  function unitPrice(p, v) { return SHOP.unitPrice(p, v == null || v === '' ? defaultVariant(p) : v); }
+  function listPrice(p, v) { return SHOP.listPrice(p, v == null || v === '' ? defaultVariant(p) : v); }
+  // Categorias que aparecem na loja: as que têm produtos, na ordem definida na gestão.
+  function shopCats() {
+    return CATS.filter(function (c) { return P.some(function (p) { return p.category === c.id; }); })
+      .sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+  }
   function round(n) { return Math.round(n * 100) / 100; }
   function waLink(text) { return 'https://wa.me/' + C.whatsapp + (text ? '?text=' + encodeURIComponent(text) : ''); }
 
-  function priceHtml(p, v) {
-    if (p.promoPrice != null) {
+  function priceHtml(p, v, card) {
+    if (card && SHOP.hasOptions(p) && !SHOP.samePrice(p)) return '<small class="from">a partir de</small> ' + brl(SHOP.minPrice(p));
+    if (listPrice(p, v) > unitPrice(p, v)) {
       return '<s><span class="sr">de </span>' + brl(listPrice(p, v)) + '</s><span class="sr">por </span>' + brl(unitPrice(p, v));
     }
     return brl(unitPrice(p, v));
+  }
+  function onPromo(p) {
+    return SHOP.hasOptions(p) ? p.variants.some(function (o) { return o.promoPrice != null && o.promoPrice > 0; }) : p.promoPrice != null && p.promoPrice > 0;
   }
 
   var toastTimer;
@@ -132,8 +147,27 @@
     maquiagem: [['compacto', '#E8C9A0', .78, 92], ['batom', '#A55385', 1.18, 180], ['mascara', '#BB6499', .98, 268]],
     skincare: [['pote', '#D5A4C2', .98, 96], ['conta-gotas', '#D4A843', 1.18, 186], ['tubo', '#BD829F', .9, 272]]
   };
-  function niche(slug, i) {
-    var items = (NICHES[slug] || NICHES.perfumes).map(function (it, j) {
+  // Nicho de uma categoria: desenho da loja (perfumes, maquiagem, skincare), foto de um produto
+  // da categoria ou, sem foto, os desenhos dos próprios produtos.
+  function nicheItems(c) {
+    if (NICHES[c.id]) return NICHES[c.id];
+    var list = P.filter(function (p) { return p.category === c.id; }).slice(0, 3);
+    var pos = list.length === 1 ? [[1.25, 180]] : list.length === 2 ? [[1.05, 130], [1.05, 230]] : [[.82, 92], [1.15, 182], [.88, 272]];
+    return list.map(function (p, k) { return [p.art || 'pote', p.tone || '#BB6499', pos[k][0], pos[k][1]]; });
+  }
+  function nichePhoto(c) {
+    var withPhoto = P.find(function (p) { return p.category === c.id && p.image; });
+    return !NICHES[c.id] && withPhoto ? withPhoto.image : '';
+  }
+  function niche(c, i) {
+    var photo = nichePhoto(c), clip = 'arch-' + i;
+    if (photo) {
+      return '<svg viewBox="0 0 360 318" aria-hidden="true" focusable="false"><defs><clipPath id="' + clip + '"><path d="M34 298 V146 A146 146 0 0 1 326 146 V298 Z"/></clipPath></defs>' +
+        '<path class="niche__arch" d="M34 298 V146 A146 146 0 0 1 326 146 V298 Z"/>' +
+        '<image href="' + esc(photo) + '" x="34" y="0" width="292" height="298" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + clip + ')"/>' +
+        '<rect class="niche__plank" x="-2" y="296" width="364" height="16" fill="' + DARK + '"/><rect class="niche__plank" x="-2" y="312" width="364" height="6" fill="' + DARK + '" opacity=".25"/></svg>';
+    }
+    var items = nicheItems(c).map(function (it, j) {
       var s = it[2], x = it[3] - 100 * s, y = 296 - 212 * s;
       return '<g class="drop" style="--d:' + (i * 3 + j) * 70 + 'ms"><g transform="translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') scale(' + s + ')">' + shape(it[0], it[1]) + '</g></g>';
     }).join('');
@@ -144,9 +178,12 @@
       '<rect class="niche__plank" x="-2" y="296" width="364" height="16" fill="' + DARK + '"/><rect class="niche__plank" x="-2" y="312" width="364" height="6" fill="' + DARK + '" opacity=".25"/></svg>';
   }
   function cabinet() {
-    return '<nav class="cabinet" aria-label="Categorias">' + CATS.map(function (c, i) {
-      var n = P.filter(function (p) { return p.category === c.slug; }).length;
-      return '<a class="niche" href="#/categoria/' + c.slug + '">' + niche(c.slug, i) +
+    var list = shopCats(), featured = list.filter(function (c) { return c.featured; });
+    if (featured.length < 3) featured = featured.concat(list.filter(function (c) { return !c.featured; })).slice(0, 3);
+    if (!featured.length) return '';
+    return '<nav class="cabinet" style="--n:' + featured.length + '" aria-label="Categorias em destaque">' + featured.slice(0, 3).map(function (c, i) {
+      var n = P.filter(function (p) { return p.category === c.id; }).length;
+      return '<a class="niche" href="#/categoria/' + c.id + '">' + niche(c, i) +
         '<span class="niche__name">' + esc(c.name) + '</span><span class="niche__count">' + (n === 1 ? '1 produto' : n + ' produtos') + '</span></a>';
     }).join('') + '</nav>';
   }
@@ -161,11 +198,14 @@
     try { localStorage.setItem('jm-cart', JSON.stringify(cart)); } catch (e) { /* navegação privada: a sacola vale só nesta aba */ }
     $('#bag-count').textContent = cart.reduce(function (n, l) { return n + l.q; }, 0);
   }
-  function inCart(id) { return cart.filter(function (l) { return l.id === id; }).reduce(function (n, l) { return n + l.q; }, 0); }
+  function inCart(id, v) {
+    return cart.filter(function (l) { return l.id === id && (v === undefined || l.v === (v || '')); }).reduce(function (n, l) { return n + l.q; }, 0);
+  }
   function add(id, v, q) {
     var p = byId(id);
-    var room = p.stock - inCart(id);
-    if (room <= 0) { toast('Você já tem todo o estoque de ' + p.name + ' na sacola.'); return false; }
+    v = SHOP.hasOptions(p) ? (v || defaultVariant(p)) : '';
+    var room = SHOP.stockOf(p, v) - inCart(id, v);
+    if (room <= 0) { toast(SHOP.stockOf(p, v) <= 0 ? p.name + (v ? ' (' + v + ')' : '') + ' está esgotado.' : 'Você já tem todo o estoque de ' + p.name + (v ? ' (' + v + ')' : '') + ' na sacola.'); return false; }
     q = Math.min(q, room);
     var line = cart.find(function (l) { return l.id === id && l.v === v; });
     if (line) line.q += q; else cart.push({ id: id, v: v || '', q: q });
@@ -175,7 +215,7 @@
   function setQty(i, q) {
     var l = cart[i]; if (!l) return;
     var p = byId(l.id);
-    var max = p.stock - (inCart(l.id) - l.q);
+    var max = SHOP.stockOf(p, l.v) - (inCart(l.id, l.v) - l.q);
     if (q <= 0) cart.splice(i, 1); else l.q = Math.min(q, max);
     save();
   }
@@ -238,35 +278,35 @@
   var state = { cat: null, q: '', sort: 'featured', inStock: false };
 
   function itemHtml(p) {
-    var out = p.stock <= 0;
+    var out = stockAll(p) <= 0;
     var tag = out ? '<span class="item__tag item__tag--out">Esgotado</span>'
-      : p.promoPrice != null ? '<span class="item__tag item__tag--promo">Promoção</span>'
-      : p.stock <= 3 ? '<span class="item__tag item__tag--low">Últimas unidades</span>' : '';
+      : onPromo(p) ? '<span class="item__tag item__tag--promo">Promoção</span>'
+      : stockAll(p) <= 3 ? '<span class="item__tag item__tag--low">Últimas unidades</span>' : '';
     var action = out
       ? '<button class="add" type="button" disabled>Esgotado</button>'
-      : p.variants ? '<a class="add" href="#/produto/' + p.slug + '">Ver opções</a>'
+      : SHOP.hasOptions(p) ? '<a class="add" href="#/produto/' + p.slug + '">Ver opções</a>'
       : '<button class="add" type="button" data-add="' + p.id + '">Adicionar</button>';
     return '<article class="item">' +
       '<a class="item__art" href="#/produto/' + p.slug + '" tabindex="-1" aria-hidden="true">' + art(p) + '</a>' + tag +
       '<h3><a href="#/produto/' + p.slug + '">' + esc(p.name) + '</a></h3>' +
-      '<p class="item__short">' + esc(p.short) + '</p>' +
-      '<div class="item__foot"><span class="price">' + priceHtml(p) + '</span>' + action + '</div></article>';
+      '<p class="item__short">' + esc(p.short || SHOP.contentLabel(p)) + '</p>' +
+      '<div class="item__foot"><span class="price">' + priceHtml(p, '', true) + '</span>' + action + '</div></article>';
   }
 
   function filtered() {
     var q = state.q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     var list = P.filter(function (p) {
       if (state.cat && p.category !== state.cat) return false;
-      if (state.inStock && p.stock <= 0) return false;
+      if (state.inStock && stockAll(p) <= 0) return false;
       if (!q) return true;
-      var hay = (p.name + ' ' + p.short + ' ' + catName(p.category)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      var hay = (p.name + ' ' + (p.short || '') + ' ' + catName(p.category)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
       return hay.indexOf(q) !== -1;
     });
-    var price = function (p) { return unitPrice(p); };
+    var price = function (p) { return SHOP.minPrice(p); };
     if (state.sort === 'asc') list.sort(function (a, b) { return price(a) - price(b); });
     else if (state.sort === 'desc') list.sort(function (a, b) { return price(b) - price(a); });
     else if (state.sort === 'name') list.sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
-    else list.sort(function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.stock <= 0) - (b.stock <= 0); });
+    else list.sort(function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (stockAll(a) <= 0) - (stockAll(b) <= 0); });
     return list;
   }
 
@@ -274,6 +314,12 @@
     var grid = $('#grid'); if (!grid) return;
     var list = filtered();
     $('#count').textContent = list.length === 1 ? '1 produto' : list.length + ' produtos';
+    if (!P.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>Novidades chegando em breve</h3>' +
+        '<p>Estamos preparando o catálogo. Enquanto isso, fale com a gente pelo WhatsApp.</p>' +
+        '<a class="btn btn--main" href="' + waLink('Olá! Vim pelo site da JM Store.') + '" target="_blank" rel="noopener">Falar no WhatsApp</a></div>';
+      return;
+    }
     if (!list.length) {
       grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>Nenhum produto encontrado</h3>' +
         '<p>' + (state.q ? 'Nada com “' + esc(state.q) + '”. Tente outra palavra ou ' : 'Tente ') + 'ver todas as categorias.</p>' +
@@ -283,14 +329,27 @@
     grid.innerHTML = list.map(itemHtml).join('');
   }
 
+  // Filtros de categoria: no computador, as primeiras viram botões e o resto fica em "Mais";
+  // no celular, um botão "Filtrar" abre a lista inteira.
+  var VISIBLE_TABS = 4;
+  function filtersHtml() {
+    var list = shopCats();
+    if (!list.length) return '';
+    var tab = function (c) { return '<a class="tab" href="#/categoria/' + c.id + '"' + (state.cat === c.id ? ' aria-current="page"' : '') + '>' + esc(c.name) + '</a>'; };
+    var all = '<a class="tab" href="#/"' + (!state.cat ? ' aria-current="page"' : '') + '>Todos</a>';
+    var shown = list.slice(0, VISIBLE_TABS), more = list.slice(VISIBLE_TABS);
+    var activeInMore = more.some(function (c) { return c.id === state.cat; });
+    var current = state.cat ? catName(state.cat) : 'Todos';
+    var menu = function (items) { return items.map(function (c) { return '<li><a href="#/categoria/' + c.id + '"' + (state.cat === c.id ? ' aria-current="page"' : '') + '>' + esc(c.name) + '</a></li>'; }).join(''); };
+    return '<nav class="tabs" aria-label="Categorias">' + all + shown.map(tab).join('') +
+        (more.length ? '<details class="more"><summary class="tab"' + (activeInMore ? ' aria-current="page"' : '') + '>' + (activeInMore ? esc(current) : 'Mais') + ' ▾</summary><ul class="menu">' + menu(more) + '</ul></details>' : '') + '</nav>' +
+      '<details class="filter-m"><summary>Filtrar: <b>' + esc(current) + '</b> ▾</summary><ul class="menu">' +
+        '<li><a href="#/"' + (!state.cat ? ' aria-current="page"' : '') + '>Todos</a></li>' + menu(list) + '</ul></details>';
+  }
   function catalogHtml(title, sub) {
-    var tabs = '<a class="tab" href="#/"' + (!state.cat ? ' aria-current="page"' : '') + '>Todos</a>' +
-      CATS.map(function (c) {
-        return '<a class="tab" href="#/categoria/' + c.slug + '"' + (state.cat === c.slug ? ' aria-current="page"' : '') + '>' + c.name + '</a>';
-      }).join('');
     return '<section class="catalog" id="catalogo" aria-labelledby="cat-title"><div class="wrap">' +
-      '<div class="catalog__head"><div><h2 id="cat-title">' + title + '</h2><p>' + sub + '</p></div>' +
-      '<nav class="tabs" aria-label="Categorias">' + tabs + '</nav></div>' +
+      '<div class="catalog__head"><div><h2 id="cat-title">' + title + '</h2>' + (sub ? '<p>' + sub + '</p>' : '') + '</div>' +
+      filtersHtml() + '</div>' +
       '<div class="tools"><label>Ordenar <select id="sort">' +
         '<option value="featured">Destaques</option><option value="asc">Menor preço</option>' +
         '<option value="desc">Maior preço</option><option value="name">Nome</option></select></label>' +
@@ -312,16 +371,16 @@
     document.title = 'JM Store — Cosméticos importados';
     app.innerHTML =
       '<section class="hero"><div class="wrap">' +
-        '<div class="hero__head"><h1>Perfumes, maquiagem e skincare importados.</h1>' +
-        '<p class="hero__lead">Entregamos no seu bairro ou você retira grátis na loja. Pagamento no PIX.</p></div>' +
+        '<div class="hero__head"><h1>Perfumes, maquiagens e muito mais.</h1>' +
+        '<p class="hero__lead">Entregamos na sua casa ou você retira na loja. Pague no PIX ou no cartão.</p></div>' +
         cabinet() +
       '</div></section>' +
-      catalogHtml('Nossos produtos', 'Perfumes, maquiagem e skincare.') +
+      catalogHtml('Nossos produtos', '') +
       '<section class="how" aria-labelledby="how-title"><div class="wrap"><h2 id="how-title">Como comprar</h2><ol>' +
         '<li><h3>Escolha</h3><p>Coloque os produtos na sacola.</p></li>' +
         '<li><h3>Informe a entrega</h3><p>Frete pelo bairro ou retirada grátis.</p></li>' +
         '<li><h3>Confirme no WhatsApp</h3><p>O pedido chega pronto na nossa conversa.</p></li>' +
-        '<li><h3>Pague e receba</h3><p>PIX e entrega em até 3 dias úteis.</p></li>' +
+        '<li><h3>Pague e receba</h3><p>PIX ou cartão, com entrega em até 3 dias úteis.</p></li>' +
       '</ol></div></section>';
     bindCatalog();
   }
@@ -331,11 +390,7 @@
     state.cat = slug;
     document.title = catName(slug) + ' — JM Store';
     app.innerHTML = '<div class="wrap"><nav class="crumbs" aria-label="Você está em"><a href="#/">Início</a> / ' + catName(slug) + '</nav></div>' +
-      catalogHtml(catName(slug), {
-        perfumes: 'Eau de parfum, eau de toilette e body splash.',
-        maquiagem: 'Batons, bases, sombras e tudo para o make.',
-        skincare: 'Séruns, hidratantes e proteção solar.'
-      }[slug] || '');
+      catalogHtml(catName(slug), '');
     $('.catalog').style.paddingTop = '1.5rem';
     bindCatalog();
   }
@@ -348,15 +403,20 @@
       return;
     }
     document.title = p.name + ' — JM Store';
-    var out = p.stock <= 0;
-    var v = p.variants ? p.variants[0].name : '';
-    var stock = out ? '<p class="stock stock--out">Esgotado no momento</p>'
-      : p.stock <= 3 ? '<p class="stock stock--low">Últimas ' + p.stock + ' unidades</p>'
-      : '<p class="stock stock--ok">Em estoque, pronto para entrega</p>';
-    var variants = p.variants
+    var out = stockAll(p) <= 0;
+    var v = defaultVariant(p);
+    var stockText = function (n) {
+      return n <= 0 ? '<p class="stock stock--out" id="pdp-stock">Esgotado no momento</p>'
+        : n <= 3 ? '<p class="stock stock--low" id="pdp-stock">Últimas ' + n + ' unidades</p>'
+        : '<p class="stock stock--ok" id="pdp-stock">Em estoque, pronto para entrega</p>';
+    };
+    var stock = stockText(out ? 0 : SHOP.stockOf(p, v));
+    var variants = SHOP.hasOptions(p)
       ? '<fieldset class="field" style="border:0;padding:0;margin:0"><legend>Opção</legend><div class="chips">' +
-        p.variants.map(function (x, i) {
-          return '<label class="chip"><input type="radio" name="variant" value="' + esc(x.name) + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(x.name) + '</span></label>';
+        p.variants.map(function (x) {
+          var none = (x.stock || 0) <= 0;
+          return '<label class="chip' + (none ? ' chip--off' : '') + '"><input type="radio" name="variant" value="' + esc(x.name) + '"' + (x.name === v ? ' checked' : '') + (none ? ' disabled' : '') + '>' +
+            '<span>' + esc(x.name) + (none ? ' <small>esgotado</small>' : '') + '</span></label>';
         }).join('') + '</div></fieldset>' : '';
     var buy = out
       ? '<div class="buy__row"><a class="btn btn--wa" href="' + waLink('Olá! Quero ser avisada quando chegar: ' + p.name) + '" target="_blank" rel="noopener">Avisar quando chegar</a></div>'
@@ -367,16 +427,17 @@
         '<div class="buy__row"><button class="btn btn--main" type="submit" value="now">Comprar agora</button>' +
         '<button class="btn btn--ghost" type="submit" value="bag">Adicionar à sacola</button></div>';
     var help = '<p class="buy__help">Dúvidas? <a href="' + waLink('Olá! Tenho uma dúvida sobre: ' + p.name) + '" target="_blank" rel="noopener">Entre em contato conosco</a></p>';
-    var specs = Object.keys(p.specs || {}).map(function (k) { return '<dt>' + esc(k) + '</dt><dd>' + esc(p.specs[k]) + '</dd>'; }).join('');
+    var specs = (SHOP.contentLabel(p) ? '<dt>Conteúdo</dt><dd>' + esc(SHOP.contentLabel(p)) + '</dd>' : '') +
+      Object.keys(p.specs || {}).map(function (k) { return '<dt>' + esc(k) + '</dt><dd>' + esc(p.specs[k]) + '</dd>'; }).join('');
     var related = P.filter(function (x) { return x.category === p.category && x.id !== p.id; }).slice(0, 4);
 
     app.innerHTML = '<div class="wrap">' +
       '<nav class="crumbs" aria-label="Você está em"><a href="#/">Início</a> / <a href="#/categoria/' + p.category + '">' + catName(p.category) + '</a> / ' + esc(p.name) + '</nav>' +
       '<div class="pdp"><div class="pdp__art">' + art(p) + '</div><div>' +
-        '<h1>' + esc(p.name) + '</h1><p class="pdp__short">' + esc(p.short) + '</p>' +
+        '<h1>' + esc(p.name) + '</h1>' + (p.short || SHOP.contentLabel(p) ? '<p class="pdp__short">' + esc(p.short || SHOP.contentLabel(p)) + '</p>' : '') +
         '<span class="price" id="pdp-price">' + priceHtml(p, v) + '</span>' + stock +
         '<form class="buy" id="buy">' + buy + '</form>' + help +
-        '<div class="pdp__desc"><h2>Sobre o produto</h2><p>' + esc(p.description) + '</p>' +
+        '<div class="pdp__desc"><h2>Sobre o produto</h2>' + (p.description ? '<p>' + esc(p.description) + '</p>' : '') +
         (specs ? '<dl class="specs">' + specs + '</dl>' : '') + '</div>' +
       '</div></div></div>' +
       (related.length ? '<section class="catalog" style="padding-top:0" aria-labelledby="rel-title"><div class="wrap">' +
@@ -385,11 +446,15 @@
 
     if (out) return;
     var qty = 1;
-    var setQ = function (n) { qty = Math.max(1, Math.min(n, p.stock)); $('#q-val').textContent = qty; };
+    var setQ = function (n) { qty = Math.max(1, Math.min(n, Math.max(1, SHOP.stockOf(p, v)))); $('#q-val').textContent = qty; };
     $('#q-dec').addEventListener('click', function () { setQ(qty - 1); });
     $('#q-inc').addEventListener('click', function () { setQ(qty + 1); });
     $('#buy').addEventListener('change', function (e) {
-      if (e.target.name === 'variant') { v = e.target.value; $('#pdp-price').innerHTML = priceHtml(p, v); }
+      if (e.target.name === 'variant') {
+        v = e.target.value; $('#pdp-price').innerHTML = priceHtml(p, v);
+        $('#pdp-stock').outerHTML = stockText(SHOP.stockOf(p, v));
+        setQ(qty);
+      }
     });
     $('#buy').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -397,7 +462,7 @@
       AUTH.require(LOGIN_MSG, function () {
         if (now) {
           // Comprar agora: garante o item na sacola e vai direto para o fechamento.
-          if (add(p.id, v, qty) || inCart(p.id)) location.hash = '#/checkout';
+          if (add(p.id, v, qty) || inCart(p.id, v)) location.hash = '#/checkout';
         } else if (add(p.id, v, qty)) openDrawer();
       });
     });
@@ -448,7 +513,7 @@
         '<p id="pickup" class="note" hidden>Retire em: ' + esc(C.pickupAddress) + '</p>' +
       '</fieldset>' +
       '<fieldset class="block"><legend>Pagamento</legend><div class="chips">' +
-        chip('pay', 'pix', 'PIX', true) + chip('pay', 'whatsapp', 'Combinar pelo WhatsApp') + chip('pay', 'cash_on_delivery', 'Pagar na entrega') +
+        chip('pay', 'pix', 'PIX', true) + chip('pay', 'card', 'Cartão (na entrega ou retirada)') +
       '</div><p class="note" style="margin-top:.75rem">No PIX, a chave aparece depois que você enviar o pedido.</p></fieldset>' +
       '<fieldset class="block"><legend>Observações</legend>' +
         field('f-notes', 'Algo que a gente precisa saber? (opcional)', '<textarea id="f-notes" name="notes" placeholder="Ex.: é presente, horário para entregar…"></textarea>') +
@@ -540,7 +605,7 @@
       var disc = discount();
       var total = round(subtotal() - disc + ship);
       var pay = form.pay.value;
-      var payText = { pix: 'PIX', whatsapp: 'Combinar pelo WhatsApp', cash_on_delivery: 'Pagar na entrega' }[pay];
+      var payText = { pix: 'PIX', card: 'Cartão (na entrega ou retirada)' }[pay];
       var where = isPickup()
         ? 'Retirar na loja'
         : form.street.value.trim() + ', ' + form.num.value.trim() + (form.comp.value.trim() ? ' — ' + form.comp.value.trim() : '') +
@@ -581,12 +646,12 @@
       // Salva o pedido na conta do cliente e na gestão (mesmo que ele não envie a mensagem).
       if (AUTH.user) {
         AUTH.firestore().collection('orders').add({
-          code: id, uid: AUTH.user.uid, status: 'novo',
+          code: id, uid: AUTH.user.uid, status: 'novo', channel: 'site',
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           customer: { name: form.fullname.value.trim(), phone: form.phone.value.trim(), email: AUTH.user.email || '' },
           items: cart.map(function (l) {
             var p = byId(l.id);
-            return { productId: p.id, name: p.name, variant: l.v || '', qty: l.q, price: unitPrice(p, l.v) };
+            return { productId: p.id, name: p.name, variant: l.v || '', category: p.category || '', qty: l.q, price: unitPrice(p, l.v) };
           }),
           subtotal: subtotal(),
           coupon: disc ? { code: coupon.code, discount: disc } : null,
@@ -811,13 +876,20 @@
     route();
   }
 
-  // Produtos, preços, fotos e estoque vêm da gestão (coleção pública "catalog").
-  // Se a nuvem estiver vazia ou fora do ar, a loja usa o catálogo de js/products.js.
+  // Produtos, preços, fotos, estoque e categorias vêm da gestão (coleções públicas "catalog" e "categories").
+  // Com a nuvem ativa, a loja nunca mostra os produtos de exemplo: catálogo vazio = "Novidades chegando em breve".
+  // Sem login configurado (site de demonstração), usa o catálogo de js/products.js.
   if (AUTH.enabled) {
     app.innerHTML = '<div class="wrap done"><p>Carregando produtos…</p></div>';
-    AUTH.firestore().collection('catalog').get().then(function (snap) {
-      if (!snap.empty) P = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-    }).catch(function () { /* segue com o catálogo local */ }).then(start);
+    var fs = AUTH.firestore();
+    Promise.all([fs.collection('catalog').get(), fs.collection('categories').get()]).then(function (r) {
+      P = r[0].docs.map(function (d) { return SHOP.normalize(Object.assign({ id: d.id }, d.data())); });
+      if (!r[1].empty) CATS = r[1].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      start();
+    }).catch(function () {
+      app.innerHTML = '<div class="wrap done"><h1>Não foi possível carregar os produtos</h1><p>Confira sua conexão com a internet e tente de novo.</p>' +
+        '<div class="btns" style="margin-top:1.5rem"><button type="button" class="btn btn--main" onclick="location.reload()">Tentar de novo</button></div></div>';
+    });
   } else {
     start();
   }

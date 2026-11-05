@@ -29,20 +29,23 @@ Para dar acesso a outra pessoa, repita o passo 7 com a conta dela. Para tirar o 
 
 Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o menu da conta → **Painel de gestão**.
 
-- **Painel:** vendido hoje e no mês, lucro, valores a receber, mais vendidos e produtos para repor.
+- **Painel:** escolha o período (este mês, mês passado, últimos 3 meses, este ano, ano passado ou meses à escolha) e compare com o período anterior. Mostra faturamento, lucro, vendas, ticket médio, meta do mês, gráfico de faturamento e lucro, categorias, variação de preço, mais vendidos, melhores clientes, produtos parados, formas de pagamento e site x balcão.
+- **Exportar relatório:** no Painel, **Exportar planilha** baixa um .xlsx do período (Resumo, Vendas, Itens, Categorias, Produtos, Clientes, Pagamentos) e **Exportar PDF** abre o relatório para salvar como PDF ou imprimir.
 - **Pedidos:** todo pedido finalizado no site fica salvo aqui, mesmo que o cliente não envie a mensagem do WhatsApp. Um aviso aparece quando chega pedido novo. Mude o status (confirmado, pago, saiu para entrega, entregue…) e o cliente acompanha ao vivo em **Meus pedidos**. O botão "Lançar venda" transforma o pedido em venda e baixa o estoque. Ao marcar o pedido como **Finalizado**, a venda é lançada como paga (se ainda não foi) e o cliente vê "Compra finalizada". Marcar a venda como paga na aba Vendas também atualiza o pedido.
 - **Devoluções:** até 7 dias depois de finalizada a compra, o cliente pode pedir devolução em Meus pedidos (motivo e detalhes). O pedido aparece com destaque em Pedidos → filtro "Devoluções": aprove ou recuse com uma mensagem. Quando o produto voltar e o reembolso for feito, clique em "Produto recebido e reembolso feito" para desfazer a venda e devolver o estoque.
 - **Vendas:** registre cada venda (itens, cliente, forma de pagamento, desconto, pago ou a receber). O estoque baixa sozinho; excluir a venda devolve os produtos.
-- **Produtos:** cadastro com foto, custo, preço, preço promocional, descrições, destaque e estoque, além de entrada de mercadoria. Tudo o que você salva aparece na loja na hora: foto, preço e estoque (o custo nunca é mostrado).
+- **Produtos:** cadastro com foto (da galeria ou da câmera), conteúdo da embalagem (ml, g…), custo, preço, preço promocional, descrições, destaque e estoque, além de entrada de mercadoria. Produtos com **opções** (tamanho, cor, tom) têm preço e estoque por opção. "Salvar e cadastrar outro" e "Duplicar" agilizam o cadastro. A lista mostra quais produtos estão **parados** (sem venda há mais de 30 dias). Tudo o que você salva aparece na loja na hora (o custo nunca é mostrado).
+- **Remover fundo da foto (opcional):** no cadastro, marque "Remover fundo e usar o fundo da loja". Roda no próprio navegador, sem custo; na primeira vez baixa o modelo de IA e pode levar até 1 minuto. Funciona melhor em produtos opacos; em vidro transparente, o fundo antigo pode aparecer através do frasco. Usa a biblioteca @imgly/background-removal (licença AGPL, por isso o código do site é aberto).
+- **Categorias:** crie, renomeie, ordene e exclua (só sem produtos). Elas viram os filtros da loja. Marque até 3 para a vitrine da página inicial.
 - **Cupons:** crie códigos de desconto em porcentagem ou valor fixo, com pedido mínimo opcional. Dá para pausar e reativar.
 - **Clientes:** contato com link para o WhatsApp, total gasto e quanto cada um deve.
-- **Backup:** com o login ativo, os dados ficam na nuvem e aparecem em qualquer aparelho do admin, atualizando ao vivo. Na primeira vez, se houver dados salvos no navegador, o painel oferece enviá-los para a nuvem. Mesmo assim, baixe um backup de vez em quando.
+- **Backup:** com o login ativo, os dados ficam na nuvem e aparecem em qualquer aparelho do admin, atualizando ao vivo. Mesmo assim, baixe um backup de vez em quando.
+- **Treino e lançamento** (aba Backup): **Carregar demonstração** preenche clientes, vendas, pedidos e um cupom fictícios para conhecer a gestão (o estoque não muda); **Tirar demonstração** apaga só esses dados. **Preparar para o lançamento** apaga produtos, vendas, pedidos e clientes de teste (você escolhe) para começar as vendas de verdade; depois disso a loja nunca mais mostra os produtos de exemplo.
 
 ## Como editar
 
 - **WhatsApp, PIX, endereço de retirada e frete por bairro:** `js/config.js`
-- **Produtos:** pela gestão (aba Produtos). O arquivo `js/products.js` é só o catálogo inicial, usado quando a nuvem ainda está vazia.
-- **Categorias:** `js/products.js` (`JM_CATEGORIES`).
+- **Produtos e categorias:** pela gestão. O arquivo `js/products.js` é só o catálogo inicial da primeira abertura da gestão (e da loja sem login configurado).
 - **Regras do Firestore:** sempre que `firestore.rules` mudar, cole o conteúdo de novo no console (Firestore → Regras → Publicar).
 
 Depois de editar, faça commit e push; o GitHub Pages atualiza o site em 1 a 2 minutos. Se mudar algum arquivo de `css/` ou `js/`, troque também o `?v=...` nos links de `index.html` e `admin.html` (por exemplo, para a data do dia), para que os navegadores baixem a versão nova na hora.

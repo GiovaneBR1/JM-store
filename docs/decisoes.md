@@ -2,6 +2,11 @@
 
 Lista do que já foi combinado e do que ainda está em aberto. Nada daqui foi aplicado no site ainda: a ideia é implementar tudo de uma vez quando a lista estiver fechada.
 
+## Status
+
+**Implementado** (branch `claude/bold-cray-h2uz39`): textos, pagamento, categorias e vitrine, opções e medidas, facilidades de cadastro, remoção de fundo opcional, painel novo com exportação em planilha e PDF, dados de demonstração e "Preparar para o lançamento".
+**Falta:** avisos por e-mail e notificação (aguardando o plano Blaze e a senha de app do Gmail da loja, jmstore403@gmail.com).
+
 ## Decidido
 
 ### Textos da página inicial
@@ -52,7 +57,7 @@ Protótipo: https://claude.ai/artifact/H9Pjm7ZQLC4VJCTHMRHxvF
 
 ## Em aberto
 
-- [ ] **Teste de remoção de fundo** com fotos reais da loja (aguardando as fotos).
+- [ ] **Testar a remoção de fundo com fotos reais da loja** (no teste com imagem simulada: 31 s na primeira vez, recorte bom em frasco opaco; vidro transparente deixa o fundo antigo aparecer por dentro).
 - [ ] **Plano Blaze e e-mail da loja** para os avisos (aguardando).
 
 ### Ideias para as fotos
