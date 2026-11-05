@@ -34,6 +34,8 @@ Lista do que já foi combinado e do que ainda está em aberto. Nada daqui foi ap
 - [ ] **Dados de demonstração:** botão que preenche a gestão com clientes, pedidos, vendas e cupons fictícios, para testar e treinar (e depois "Preparar para o lançamento" zera tudo).
 
 - [ ] **Novo Painel financeiro** (protótipo: https://claude.ai/artifact/H9Pjm7ZQLC4VJCTHMRHxvF): escolha de período (este mês, mês passado, últimos 3 meses, este ano, ano passado, meses à escolha) com comparação automática; faturamento, lucro, vendas e ticket médio com variação; gráfico de faturamento e lucro no tempo (com versão em tabela); categorias com faturamento, lucro, margem e crescimento; variação de preço por categoria; mais vendidos; formas de pagamento; site x balcão.
+  - Também no protótipo: **meta do mês** (andamento, projeção e onde deveria estar hoje), **melhores clientes**, **produtos parados** (sem venda há mais de 30 dias, com o valor parado em estoque) — com a situação aparecendo também na tela de Produtos — e o botão **Exportar relatório**.
+  - **Relatório exportado (.xlsx):** modelo em `docs/relatorio-modelo.xlsx` (dados simulados de outubro de 2026), com as abas Resumo, Vendas, Itens, Categorias, Produtos, Clientes e Pagamentos. Tudo por fórmula: trocar as datas, a meta ou o prazo de "parado" no Resumo recalcula a planilha.
   - Para funcionar com dados reais: gravar a **categoria** em cada item vendido (hoje só fica o produto) e o **canal** da venda (site ou balcão). O preço e o custo de cada venda já são gravados.
 
 ### Ideias para as fotos
