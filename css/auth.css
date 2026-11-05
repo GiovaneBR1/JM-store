@@ -43,3 +43,8 @@
 .gate code { background: var(--pastel-soft); padding: .2rem .45rem; border-radius: 6px; font-size: .85rem; overflow-wrap: anywhere; }
 .notice { margin: 0 0 1.25rem; padding: .7rem 1rem; border-radius: 10px; background: var(--warn-bg, #F6EEDB); color: var(--warn); font-size: .92rem; }
 .locked .nav { display: none; }
+/* No celular, o menu da conta abre logo abaixo do topo, na largura da tela (o botão pode estar à esquerda). */
+@media (max-width: 760px) {
+  .acct { position: static; }
+  .acct__menu { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); top: calc(100% + .25rem); min-width: 0; }
+}
