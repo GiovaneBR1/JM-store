@@ -37,9 +37,9 @@
 .acct__menu a:hover, .acct__menu button:hover { background: var(--pastel-soft); }
 
 /* Tela de bloqueio da gestão */
-.gate { max-width: 460px; margin: 4rem auto; text-align: center; display: grid; gap: 1rem; justify-items: center; padding: 2rem 1.5rem; background: #fff; border: 1px solid var(--pastel); border-radius: 16px; }
+.gate { max-width: 460px; margin: 4rem auto; text-align: center; display: grid; gap: 1rem; justify-items: center; padding: 2rem 1.5rem; background: var(--surface, #fff); border: 1px solid var(--pastel); border-radius: 16px; }
 .gate h1 { font-size: 2.2rem; }
 .gate p { color: var(--brown-2); }
 .gate code { background: var(--pastel-soft); padding: .2rem .45rem; border-radius: 6px; font-size: .85rem; overflow-wrap: anywhere; }
-.notice { margin: 0 0 1.25rem; padding: .7rem 1rem; border-radius: 10px; background: #F6EEDB; color: var(--warn); font-size: .92rem; }
+.notice { margin: 0 0 1.25rem; padding: .7rem 1rem; border-radius: 10px; background: var(--warn-bg, #F6EEDB); color: var(--warn); font-size: .92rem; }
 .locked .nav { display: none; }

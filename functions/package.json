@@ -1,0 +1,12 @@
+{
+  "name": "jm-store-avisos",
+  "description": "Avisos de pedidos da JM Store: e-mails para a loja e para o cliente, e notificação no celular da gestão.",
+  "private": true,
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "dependencies": {
+    "firebase-admin": "14.5.0",
+    "firebase-functions": "7.4.0",
+    "nodemailer": "10.0.13"
+  }
+}

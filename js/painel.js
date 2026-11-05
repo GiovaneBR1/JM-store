@@ -271,6 +271,7 @@
         (state.table
           ? '<div class="table-wrap"><table><thead><tr><th>Período</th><th class="num">Vendas</th><th class="num">Faturamento</th><th class="num">Custo</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead><tbody>' +
               bs.map(function (k) { return '<tr><td>' + esc(k.long) + '</td><td class="num">' + k.count + '</td><td class="num">' + brl(k.rev) + '</td><td class="num">' + brl(k.cost) + '</td><td class="num">' + brl(k.profit) + '</td><td class="num">' + (k.rev ? pct(k.profit / k.rev) : '—') + '</td></tr>'; }).join('') + '</tbody></table></div>'
+          : !c.count ? '<p class="muted">Nenhuma venda no período.</p>'
           : '<div class="chart" id="pf-chart">' + barsSvg(bs, { hit: true }) + '<div class="tip" hidden></div></div>') +
       '</section>' +
       '<div class="pf-cols"><section class="panel"><header class="panel__head"><div><h2>Categorias</h2><p class="muted">Faturamento, lucro, margem e crescimento no período</p></div>' +

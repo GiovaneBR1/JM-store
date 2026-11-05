@@ -25,6 +25,43 @@ Para dar acesso a outra pessoa, repita o passo 7 com a conta dela. Para tirar o 
 
 > Os valores de `firebase-config.js` não são secretos: eles aparecem para qualquer visitante do site. Quem protege os dados são as regras do passo 5, conferidas nos servidores do Google. Um cliente não consegue ler a gestão nem se tornar admin.
 
+## Avisos de pedido (e-mail e notificação)
+
+O que é enviado (pedidos de demonstração não enviam nada):
+- **Pedido novo:** e-mail para a loja (jmstore403@gmail.com), notificação nos aparelhos da gestão que ativaram os avisos e e-mail "Recebemos seu pedido" para o cliente (com a chave PIX quando ele escolhe PIX).
+- **Mudança de status** (confirmado, pago, saiu para entrega, pronto para retirada, finalizado, cancelado): e-mail para o cliente.
+- **Pedido de devolução:** e-mail e notificação para a loja; quando a loja aprova, recusa ou conclui, e-mail para o cliente.
+
+Funciona com as funções da pasta `functions/` (precisam do plano Blaze do Firebase). Os dados da loja usados nos e-mails ficam em `functions/loja.js`; mantenha igual ao `js/config.js`.
+
+### Publicar as funções e as regras (Cloud Shell, no navegador)
+1. Abra https://shell.cloud.google.com com a conta Google dona do projeto Firebase.
+2. Cole um comando por vez:
+   ```bash
+   git clone https://github.com/GiovaneBR1/JM-store.git && cd JM-store
+   ```
+   ```bash
+   npm install --prefix functions
+   ```
+   ```bash
+   npx firebase-tools@15.34.1 login --no-localhost
+   ```
+   ```bash
+   npx firebase-tools@15.34.1 functions:secrets:set GMAIL_APP_PASSWORD
+   ```
+   (cole a senha de app do Gmail da loja, sem espaços; ela não aparece na tela)
+   ```bash
+   npx firebase-tools@15.34.1 deploy --only functions,firestore:rules
+   ```
+3. Se perguntar sobre "cleanup policy", responda **Y** e **1** dia (evita custo de armazenamento).
+4. Na primeira publicação o Google ativa alguns serviços; se aparecer um erro de permissão do "Eventarc", espere 5 minutos e rode o último comando de novo.
+
+Para atualizar depois (mudou `functions/` ou `firestore.rules`): no Cloud Shell, `cd JM-store && git pull` e rode de novo o comando de `deploy`.
+
+### Notificações no celular da gestão
+1. No console do Firebase: ⚙ Configurações do projeto → **Cloud Messaging** → Configuração da Web → **Certificados push da Web** → Gerar par de chaves. Copie a chave e coloque em `vapidKey` no `js/firebase-config.js` (é pública).
+2. No celular da dona: abra a gestão, **adicione à tela inicial** (no iPhone é obrigatório; no Android é opcional), abra por lá, vá em **Pedidos** e toque em **Ativar avisos neste aparelho**.
+
 ## Gestão da loja
 
 Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o menu da conta → **Painel de gestão**.
