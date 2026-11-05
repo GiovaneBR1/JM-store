@@ -139,9 +139,9 @@
     }).join('');
     return '<svg viewBox="0 0 360 318" aria-hidden="true" focusable="false">' +
       '<path class="niche__arch" d="M34 298 V146 A146 146 0 0 1 326 146 V298 Z"/>' +
-      '<path d="M62 298 V154 A118 118 0 0 1 298 154 V298" fill="none" stroke="#D5A4C2" stroke-width="1.5"/>' +
+      '<path d="M62 298 V154 A118 118 0 0 1 298 154 V298" fill="none" stroke="#D5A4C2" stroke-width="1.5" class="niche__line"/>' +
       '<ellipse cx="180" cy="296" rx="120" ry="5" fill="' + DARK + '" opacity=".14"/>' + items +
-      '<rect y="296" width="360" height="16" fill="' + DARK + '"/><rect y="312" width="360" height="6" fill="' + DARK + '" opacity=".25"/></svg>';
+      '<rect class="niche__plank" x="-2" y="296" width="364" height="16" fill="' + DARK + '"/><rect class="niche__plank" x="-2" y="312" width="364" height="6" fill="' + DARK + '" opacity=".25"/></svg>';
   }
   function cabinet() {
     return '<nav class="cabinet" aria-label="Categorias">' + CATS.map(function (c, i) {
@@ -772,6 +772,29 @@
     else if (state.q) { state.cat = null; gotoCatalog(); }
   });
   $('#search-form').addEventListener('submit', function (e) { e.preventDefault(); state.q = search.value; gotoCatalog(); });
+
+  // ---------- tema: automático (segue o aparelho), claro ou escuro ----------
+  var THEMES = {
+    auto: ['Tema automático: segue o seu aparelho', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg>'],
+    light: ['Tema claro', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>'],
+    dark: ['Tema escuro', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>']
+  };
+  var NEXT_THEME = { auto: 'light', light: 'dark', dark: 'auto' };
+  function getTheme() { try { var t = localStorage.getItem('jm-theme'); return t === 'light' || t === 'dark' ? t : 'auto'; } catch (e) { return 'auto'; } }
+  function setTheme(t) {
+    if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
+    try { if (t === 'auto') localStorage.removeItem('jm-theme'); else localStorage.setItem('jm-theme', t); } catch (e) { /* vale só nesta visita */ }
+    var btn = $('#theme-btn');
+    btn.innerHTML = THEMES[t][1];
+    btn.setAttribute('aria-label', THEMES[t][0] + '. Toque para trocar.');
+    btn.title = THEMES[t][0];
+  }
+  $('#theme-btn').addEventListener('click', function () {
+    var t = NEXT_THEME[getTheme()];
+    setTheme(t);
+    toast(THEMES[t][0]);
+  });
+  setTheme(getTheme());
 
   // ---------- boot ----------
   var waHello = waLink('Olá! Vim pelo site da JM Store.');
