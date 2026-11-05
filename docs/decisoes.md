@@ -98,6 +98,15 @@ Todas rodam no servidor que já está ativo (Firebase, plano Blaze), agendadas p
 - [ ] **WhatsApp Business da dona:** mensagem de saudação automática ("Recebemos seu pedido, já vamos confirmar") e respostas rápidas (/confirmado, /pix, /retirada). Passar os textos prontos.
 
 
+## Para estudar depois
+
+- [ ] **Carrossel de produtos na página inicial** (depois das automações). Caminhos a comparar num protótipo:
+  1. **Prateleiras deslizantes** ("Destaques", "Novidades", "Mais vendidos") abaixo da vitrine, montadas sozinhas com os dados da loja, sem girar sozinhas. Recomendado: funciona bem no celular.
+  2. **Banner de campanhas** no topo (2 ou 3 banners trocados na gestão: datas especiais, frete grátis), só quando houver campanha; se girar, devagar, com pausa ao tocar e pontinhos de navegação.
+  3. Trocar a vitrine dos nichos por um carrossel. Não recomendado: a vitrine é o elemento mais marcante da loja.
+  - Combinação a testar: vitrine no topo + prateleira "Destaques" logo abaixo + banner opcional.
+
+## Ideias para a v2
 
 Não entram na v1. Ficam anotadas para depois que a loja estiver vendendo pelo site por alguns meses.
 
@@ -106,5 +115,5 @@ Não entram na v1. Ficam anotadas para depois que a loja estiver vendendo pelo s
 - **WhatsApp automático nas automações acima:** os mesmos avisos (status do pedido, lembrete de PIX, avise-me, recompra) também pelo WhatsApp, aproveitando a janela de 24 h grátis depois que o cliente manda o pedido.
 - **Respostas automáticas no WhatsApp:** cliente manda "meu pedido" → recebe o status; "horário" → endereço e horário de retirada.
 - **Mensagens automáticas no WhatsApp** (API oficial da Meta) a cada mudança de status do pedido. Custa centavos por mensagem de utilidade (conferir a tabela atual da Meta); precisa de número para a API, conta Meta Business verificada, modelos aprovados e autorização do cliente. Dá para testar antes com o número de teste gratuito da Meta.
-- As três precisam de uma parte em servidor (Cloud Functions, plano Blaze do Firebase com cartão cadastrado). A estrutura de pedidos com status da v1 já serve de base.
+- Todas usam o servidor que já está ativo (Cloud Functions, plano Blaze). A estrutura de pedidos com status da v1 já serve de base.
 - **Open Finance:** só faria sentido para conciliar várias contas ou crédito; não é prioridade.
