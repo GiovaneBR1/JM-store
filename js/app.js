@@ -125,26 +125,30 @@
       '<g class="lift">' + shape(p.art, p.tone) + '</g></svg>';
   }
 
-  function shelf() {
-    // Vitrine em arco com os produtos apoiados na prateleira.
-    var items = [
-      ['perfume', '#BB6499', 1.3, -12],
-      ['batom', '#A55385', 1.05, 140],
-      ['conta-gotas', '#D4A843', 1.15, 212],
-      ['pote', '#D5A4C2', 1, 334],
-      ['perfume', '#8B5A3D', 0.85, 432]
-    ];
-    var g = items.map(function (it) {
-      var s = it[2], y = 318 - 212 * s;
-      return '<g transform="translate(' + it[3] + ' ' + y.toFixed(1) + ') scale(' + s + ')">' + shape(it[0], it[1]) + '</g>';
+  // Vitrine da loja: um nicho em arco por categoria, com os frascos apoiados na mesma prateleira.
+  // Cada nicho é também o atalho para a categoria.
+  var NICHES = {
+    perfumes: [['perfume', '#8B5A3D', .82, 92], ['perfume', '#BB6499', 1.22, 182], ['tubo', '#D5A4C2', .88, 272]],
+    maquiagem: [['compacto', '#E8C9A0', .78, 92], ['batom', '#A55385', 1.18, 180], ['mascara', '#BB6499', .98, 268]],
+    skincare: [['pote', '#D5A4C2', .98, 96], ['conta-gotas', '#D4A843', 1.18, 186], ['tubo', '#BD829F', .9, 272]]
+  };
+  function niche(slug, i) {
+    var items = (NICHES[slug] || NICHES.perfumes).map(function (it, j) {
+      var s = it[2], x = it[3] - 100 * s, y = 296 - 212 * s;
+      return '<g class="drop" style="--d:' + (i * 3 + j) * 70 + 'ms"><g transform="translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') scale(' + s + ')">' + shape(it[0], it[1]) + '</g></g>';
     }).join('');
-    return '<svg viewBox="0 0 560 360" role="img" aria-label="Perfume, batom, sérum e creme na vitrine da JM Store">' +
-      '<path d="M70 318 V170 A210 210 0 0 1 490 170 V318 Z" fill="#F2DDE6"/>' +
-      '<path d="M110 318 V182 A170 170 0 0 1 450 182 V318" fill="none" stroke="#D5A4C2" stroke-width="1.5"/>' +
-      g +
-      '<rect x="20" y="316" width="520" height="14" rx="3" fill="' + DARK + '"/>' +
-      '<rect x="40" y="330" width="480" height="10" fill="' + DARK + '" opacity=".14"/>' +
-      '</svg>';
+    return '<svg viewBox="0 0 360 318" aria-hidden="true" focusable="false">' +
+      '<path class="niche__arch" d="M34 298 V146 A146 146 0 0 1 326 146 V298 Z"/>' +
+      '<path d="M62 298 V154 A118 118 0 0 1 298 154 V298" fill="none" stroke="#D5A4C2" stroke-width="1.5"/>' +
+      '<ellipse cx="180" cy="296" rx="120" ry="5" fill="' + DARK + '" opacity=".14"/>' + items +
+      '<rect y="296" width="360" height="16" fill="' + DARK + '"/><rect y="312" width="360" height="6" fill="' + DARK + '" opacity=".25"/></svg>';
+  }
+  function cabinet() {
+    return '<nav class="cabinet" aria-label="Categorias">' + CATS.map(function (c, i) {
+      var n = P.filter(function (p) { return p.category === c.slug; }).length;
+      return '<a class="niche" href="#/categoria/' + c.slug + '">' + niche(c.slug, i) +
+        '<span class="niche__name">' + esc(c.name) + '</span><span class="niche__count">' + (n === 1 ? '1 produto' : n + ' produtos') + '</span></a>';
+    }).join('') + '</nav>';
   }
 
   // ---------- cart ----------
@@ -240,7 +244,7 @@
       : p.stock <= 3 ? '<span class="item__tag item__tag--low">Últimas unidades</span>' : '';
     var action = out
       ? '<button class="add" type="button" disabled>Esgotado</button>'
-      : p.variants ? '<a class="add" href="#/produto/' + p.slug + '">Escolher opção</a>'
+      : p.variants ? '<a class="add" href="#/produto/' + p.slug + '">Ver opções</a>'
       : '<button class="add" type="button" data-add="' + p.id + '">Adicionar</button>';
     return '<article class="item">' +
       '<a class="item__art" href="#/produto/' + p.slug + '" tabindex="-1" aria-hidden="true">' + art(p) + '</a>' + tag +
@@ -307,19 +311,11 @@
     state.cat = null;
     document.title = 'JM Store — Cosméticos importados';
     app.innerHTML =
-      '<section class="hero"><div class="wrap hero__in">' +
-        '<div class="hero__text"><h1>Perfumes e maquiagem importados, entregues na sua porta.</h1>' +
-        '<p class="hero__lead">Produtos importados e de qualidade, com entrega no seu bairro.</p>' +
-        '<div class="hero__cta"><button type="button" class="btn btn--main" data-goto-catalog>Ver produtos</button>' +
-        '<a class="btn btn--ghost" href="' + waLink('Olá! Vim pelo site da JM Store.') + '" target="_blank" rel="noopener">Falar no WhatsApp</a></div></div>' +
-        '<div class="shelf">' + shelf() + '</div>' +
+      '<section class="hero"><div class="wrap">' +
+        '<div class="hero__head"><h1>Perfumes, maquiagem e skincare importados.</h1>' +
+        '<p class="hero__lead">Entregamos no seu bairro ou você retira grátis na loja. Pagamento no PIX.</p></div>' +
+        cabinet() +
       '</div></section>' +
-      '<section class="promise" aria-label="Como a JM Store funciona"><ul>' +
-        '<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Entrega própria no seu bairro</li>' +
-        '<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10 12 4l8 6v10H4z"/><path d="M10 20v-6h4v6"/></svg>Retirada grátis</li>' +
-        '<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 12 12 21 3 12z"/><path d="M8.5 12h7"/></svg>Pagamento no PIX</li>' +
-        '<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8-4.3-4.1 5.9-.8z"/></svg>Produtos originais importados</li>' +
-      '</ul></section>' +
       catalogHtml('Nossos produtos', 'Perfumes, maquiagem e skincare.') +
       '<section class="how" aria-labelledby="how-title"><div class="wrap"><h2 id="how-title">Como comprar</h2><ol>' +
         '<li><h3>Escolha</h3><p>Coloque os produtos na sacola.</p></li>' +

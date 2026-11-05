@@ -62,20 +62,23 @@ main:focus { outline: none; }
 .btn--block { width: 100%; }
 
 /* Hero */
-.hero { position: relative; overflow: hidden; }
-.hero__in { display: grid; grid-template-columns: 1.05fr 1fr; gap: 2rem; align-items: end; padding-top: 4rem; }
-.hero__text { padding-bottom: 4.5rem; }
-.hero h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); font-weight: 600; letter-spacing: -.015em; max-width: 13ch; }
-.hero__lead { font-size: 1.125rem; margin-top: 1.25rem; max-width: 42ch; color: var(--brown-2); }
-.hero__cta { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
-.shelf { position: relative; }
-.shelf svg { width: 100%; height: auto; }
+.hero { padding: 3.25rem 0 1rem; }
+.hero__head { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 1rem 3rem; align-items: end; margin-bottom: 2.75rem; }
+.hero h1 { font-size: clamp(2.5rem, 5.2vw, 4.4rem); font-weight: 600; line-height: 1.02; letter-spacing: -.02em; max-width: 19ch; text-wrap: balance; }
+.hero__lead { font-size: 1.125rem; line-height: 1.55; max-width: 36ch; color: var(--brown-2); padding-bottom: .4rem; }
 
-/* Promise strip */
-.promise { background: var(--brown); color: #FBEFF4; }
-.promise ul { list-style: none; margin: 0 auto; padding: 1.1rem 1.25rem; max-width: var(--w); display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-.promise li { display: flex; gap: .65rem; align-items: center; font-size: .95rem; }
-.promise svg { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--rosa); stroke-width: 1.6; }
+/* Vitrine: nichos em arco sobre uma prateleira contínua; cada nicho abre a categoria */
+.cabinet { display: grid; grid-template-columns: repeat(3, 1fr); }
+.niche { display: grid; justify-items: center; text-decoration: none; color: var(--brown); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.niche svg { width: 100%; height: auto; overflow: visible; }
+.niche + .niche svg { margin-left: -1px; width: calc(100% + 1px); } /* prateleira sem emenda entre os nichos */
+.niche__arch { fill: var(--pastel); transition: fill .2s ease-out; }
+.niche:hover .niche__arch, .niche:focus-visible .niche__arch { fill: #EACCDC; }
+.niche .drop { animation: drop .55s cubic-bezier(.2, .9, .3, 1.15) both; animation-delay: var(--d); }
+.niche__name { font: italic 500 clamp(1.5rem, 3vw, 2.2rem)/1.1 var(--serif); margin-top: 1rem; }
+.niche:hover .niche__name { text-decoration: underline; text-decoration-color: var(--rosa); text-decoration-thickness: 1.5px; text-underline-offset: 6px; }
+.niche__count { font-size: .9rem; color: var(--brown-2); margin-top: .15rem; }
+@keyframes drop { from { transform: translateY(-28px); opacity: 0; } 60% { opacity: 1; } }
 
 /* Catalog */
 .catalog { padding: 4.5rem 0 3rem; }
@@ -109,7 +112,7 @@ main:focus { outline: none; }
 .item__foot { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: auto; padding-top: .75rem; }
 .price { font-weight: 700; font-size: 1.05rem; }
 .price s { font-weight: 400; color: var(--brown-2); font-size: .85rem; margin-right: .35rem; }
-.add { text-decoration: none; text-align: center; border: 1.5px solid var(--malva-ink); background: transparent; color: var(--malva-ink); border-radius: var(--r-full); padding: .35rem .9rem; font-size: .88rem; font-weight: 500; cursor: pointer; }
+.add { white-space: nowrap; text-decoration: none; text-align: center; border: 1.5px solid var(--malva-ink); background: transparent; color: var(--malva-ink); border-radius: var(--r-full); padding: .35rem .9rem; font-size: .88rem; font-weight: 500; cursor: pointer; }
 .add:hover { background: var(--malva-ink); color: #fff; }
 .add[disabled] { border-color: var(--pastel); color: var(--brown-2); background: transparent; cursor: not-allowed; }
 .empty { text-align: center; padding: 3rem 1rem; background: var(--pastel-soft); border-radius: var(--r-lg); }
@@ -258,13 +261,12 @@ main:focus { outline: none; }
 .wa-float { position: fixed; right: 1.25rem; bottom: 1.25rem; width: 56px; height: 56px; border-radius: var(--r-full); background: #1F7A4D; display: grid; place-items: center; box-shadow: var(--shadow-lg); z-index: 40; }
 .wa-float svg { width: 30px; height: 30px; fill: #fff; }
 
-.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 200%); background: var(--brown); color: #fff; padding: .75rem 1.25rem; border-radius: var(--r-full); box-shadow: var(--shadow-lg); transition: transform .2s ease-out; z-index: 70; max-width: calc(100% - 2rem); }
-.toast.show { transform: translate(-50%, 0); }
+.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 200%); background: var(--brown); color: #fff; padding: .75rem 1.25rem; border-radius: var(--r-full); box-shadow: var(--shadow-lg); transition: transform .2s ease-out, visibility .2s; visibility: hidden; z-index: 70; max-width: calc(100% - 2rem); }
+.toast.show { transform: translate(-50%, 0); visibility: visible; }
 
 /* Responsive */
 @media (max-width: 1000px) {
   .grid { grid-template-columns: repeat(3, 1fr); }
-  .promise ul { grid-template-columns: repeat(2, 1fr); }
   .how ol { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 760px) {
@@ -272,8 +274,11 @@ main:focus { outline: none; }
   .search { order: 3; flex-basis: 100%; max-width: none; }
   .bag-btn { margin-left: auto; }
   .bag-btn span { display: none; }
-  .hero__in { grid-template-columns: 1fr; padding-top: 2.5rem; gap: 0; }
-  .hero__text { padding-bottom: 1.5rem; }
+  .hero { padding-top: 2rem; }
+  .hero__head { grid-template-columns: 1fr; margin-bottom: 1.75rem; }
+  .hero__lead { font-size: 1rem; }
+  .niche__name { font-size: 1.3rem; margin-top: .6rem; }
+  .niche__count { font-size: .8rem; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 1.75rem 1rem; }
   .item h3 { font-size: 1.15rem; }
   .item__foot { flex-direction: column; align-items: stretch; }
@@ -285,7 +290,7 @@ main:focus { outline: none; }
   .tools .count { margin-left: 0; }
 }
 @media (max-width: 420px) {
-  .promise ul, .how ol { grid-template-columns: 1fr; }
+  .how ol { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
