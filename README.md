@@ -41,7 +41,7 @@ Funciona com as funções da pasta `functions/` (precisam do plano Blaze do Fire
    git clone https://github.com/GiovaneBR1/JM-store.git && cd JM-store
    ```
    ```bash
-   npm install --prefix functions
+   npm ci --prefix functions
    ```
    ```bash
    npx firebase-tools@15.34.1 login --no-localhost
