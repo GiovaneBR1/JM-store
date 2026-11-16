@@ -417,3 +417,5 @@ tr.is-sel td { background: var(--pastel-soft); }
   .zone-row [name=zHoods] { order: 4; } .zone-row [name=zDays] { order: 5; }
   .store-data dl { grid-template-columns: 1fr; gap: .1rem; } .store-data dd { margin-bottom: .45rem; }
 }
+
+.order__problems { margin: .35rem 0; padding-left: 1.2rem; font-size: .9rem; }

@@ -597,6 +597,9 @@
             (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(o.customer.phone) + '</a>' : '') + '</p></div>' +
             '<b class="order__total">' + brl(o.total) + '</b></header>' +
           (o.reserved && !o.saleId ? '<p class="order__flags"><span class="pill pill--ok">Estoque reservado</span>' + (o.autoConfirmed ? ' <span class="pill pill--neutral">Confirmado automaticamente</span>' : '') + '</p>' : '') +
+          (o.conferencia && !o.conferencia.ok ? '<div class="return return--err"><p><b>⚠️ Os valores deste pedido não conferem com a loja.</b> Pode ter sido montado fora do site, ou um preço mudou durante a compra. Confira antes de confirmar.</p><ul class="order__problems">' +
+            o.conferencia.problemas.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>' +
+            (o.conferencia.esperado ? '<p class="muted">Total certo: <b>' + brl(o.conferencia.esperado.total) + '</b> (o pedido diz ' + brl(o.total) + ').</p>' : '') + '</div>' : '') +
           (o.status === 'cancelado' && o.autoCancelled ? '<p class="order__flags"><span class="pill pill--warn">Cancelado automaticamente: PIX não pago</span></p>' : '') +
           '<ul class="order__items">' + o.items.map(function (i) {
             return '<li>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' <span class="muted">' + brl(i.price * i.qty) + '</span></li>';
