@@ -1012,7 +1012,7 @@
       '<div class="field"><span>Conteúdo da embalagem</span><div class="content-row"><input name="contentQty" ' + money + ' value="' + esc(content.qty || '') + '" placeholder="Ex.: 100" aria-label="Quantidade">' +
         '<select name="contentUnit" aria-label="Unidade">' + SHOP.UNITS.map(function (u) { return opt(u, u, content.unit || 'ml'); }).join('') + '</select></div></div>' +
       field('Custo (R$)', 'cost', p.cost, money + ' placeholder="Quanto você pagou"') +
-      field('Avisar quando chegar em', 'minStock', p.minStock, 'type="number" step="1" min="0"') +
+      field('Estoque mínimo (avisar ao chegar em)', 'minStock', p.minStock, 'type="number" step="1" min="0"') +
       '<label class="check field--full"><input type="checkbox" id="has-opts"' + (hasOpts ? ' checked' : '') + '> Este produto tem opções (tamanho, cor, tom…), cada uma com preço e estoque</label>' +
       '<div class="field field--full" id="opts-box"' + (hasOpts ? '' : ' hidden') + '><span>Opções <small>(nome · preço · promo · estoque)</small></span><div class="opts" id="opts">' +
         (hasOpts ? p.variants.map(optionRow).join('') : optionRow() + optionRow()) + '</div>' +
