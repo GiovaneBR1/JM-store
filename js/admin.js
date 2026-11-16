@@ -7,7 +7,7 @@
   var KEY = 'jm-admin-v1';
   var AUTH = window.JMAuth;
   var cloud = !!(AUTH && AUTH.enabled);
-  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders', 'categories', 'settings', 'requests'];
+  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders', 'categories', 'settings', 'requests', 'site'];
   var SHOP = window.JMShop;
   // Status dos pedidos do site (os mesmos rótulos aparecem para o cliente em "Meus pedidos").
   var ORDER_STATUS = [
@@ -198,7 +198,7 @@
 
   // Catálogo e pedidos do site não fazem parte do backup: são mantidos ao reiniciar ou importar.
   function keepCloud(data) {
-    return Object.assign({ categories: (db && db.categories) || [], settings: (db && db.settings) || [] }, data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [], requests: (db && db.requests) || [] });
+    return Object.assign({ categories: (db && db.categories) || [], settings: (db && db.settings) || [] }, data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [], requests: (db && db.requests) || [], site: (db && db.site) || [] });
   }
 
   function applySnap(col, snap) {
@@ -215,7 +215,7 @@
   function startCloud() {
     stopCloud();
     app.innerHTML = '<p class="empty">Carregando os dados da loja…</p>';
-    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [], categories: [], settings: [], requests: [] };
+    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [], categories: [], settings: [], requests: [], site: [] };
     COLS.forEach(function (col) {
       unsubs.push(fs.collection(col).onSnapshot(function (snap) {
         if (!loaded[col]) {
@@ -324,6 +324,7 @@
   function viewPainel() {
     var low = db.products.filter(function (p) { return totalStock(p) <= p.minStock; }).sort(function (a, b) { return totalStock(a) - totalStock(b); });
     return '' +
+      (cloud && lojaFaltando().length ? '<p class="notice">Antes de divulgar o site, preencha os dados da loja: ' + lojaFaltando().join(', ') + '. <a href="#/dados">Abrir Ajustes</a></p>' : '') +
       (newOrders().length ? '<p class="notice notice--ok">🛍️ ' + newOrders().length + ' pedido(s) do site esperando você. <a href="#/pedidos">Ver pedidos</a></p>' : '') +
       (newRequests().length ? '<p class="notice notice--ok">✨ ' + newRequests().length + ' pedido(s) personalizado(s) para responder. <a href="#/pedidos" data-req-filter>Ver pedidos personalizados</a></p>' : '') +
       '<div class="head"><div><h1>Painel</h1></div>' +
@@ -445,6 +446,100 @@
             '<td class="row-actions"><button class="link" data-action="edit-customer" data-id="' + c.id + '">Editar</button>' +
             '<button class="link link--danger" data-action="delete-customer" data-id="' + c.id + '">Excluir</button></td></tr>';
         }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum cliente cadastrado ainda.</p>');
+  }
+
+  // ---------- dados da loja (coleção pública "site", documento "loja") ----------
+  var CFG = window.JM_CONFIG || {};
+  // Valores de exemplo do js/config.js: contam como "não preenchido".
+  var EXEMPLO = ['sua-chave-pix@email.com', 'Nome do titular', 'Sua Cidade', 'Rua Exemplo, 123 — Centro (combine o horário pelo WhatsApp)'];
+  function real(v) { return v && EXEMPLO.indexOf(v) === -1 ? v : ''; }
+  function siteDoc() { return ((db && db.site) || []).find(function (x) { return x.id === 'loja'; }); }
+  function storeData() {
+    var d = siteDoc();
+    if (d) return d;
+    return { whatsapp: CFG.whatsapp || '', pixKey: real(CFG.pixKey), pixName: real(CFG.pixName), city: real(CFG.city),
+      pickupAddress: real(CFG.pickupAddress), hours: '', instagram: '', shippingZones: CFG.shippingZones || [] };
+  }
+  function lojaFaltando() {
+    var d = storeData(), out = [];
+    if (!digits(d.whatsapp)) out.push('WhatsApp');
+    if (!real(d.pixKey)) out.push('chave PIX');
+    if (!real(d.pixName)) out.push('titular do PIX');
+    if (!real(d.city)) out.push('cidade');
+    if (!real(d.pickupAddress)) out.push('endereço de retirada');
+    if (!siteDoc() || !Array.isArray(siteDoc().shippingZones)) out.push('regiões de entrega e frete');
+    return out;
+  }
+  function phoneBR(d) {
+    d = digits(d); if (d.length > 11 && d.indexOf('55') === 0) d = d.slice(2);
+    return d.length >= 10 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, -4) + '-' + d.slice(-4) : d;
+  }
+  function zoneRow(z) {
+    z = z || { name: '', neighborhoods: [], fee: '', days: '' };
+    return '<div class="zone-row">' +
+      '<input name="zName" value="' + esc(z.name) + '" placeholder="Região (ex.: Centro)" aria-label="Nome da região">' +
+      '<input name="zHoods" value="' + esc((z.neighborhoods || []).join(', ')) + '" placeholder="Bairros, separados por vírgula" aria-label="Bairros">' +
+      '<input name="zFee" ' + money + ' value="' + esc(z.fee) + '" placeholder="Frete" aria-label="Frete em reais">' +
+      '<input name="zDays" value="' + esc(z.days) + '" placeholder="Prazo (ex.: 1 dia útil)" aria-label="Prazo de entrega">' +
+      '<button type="button" class="link link--danger" data-zone-rm aria-label="Remover região">✕</button></div>';
+  }
+  function storeForm() {
+    var d = storeData();
+    openModal('<h2>Dados da loja</h2><p class="muted" style="margin:-.25rem 0 1rem">Aparecem na loja, no fechamento do pedido, nos e-mails e na política de privacidade.</p><div class="fields">' +
+      field('WhatsApp da loja (com DDD)', 'whatsapp', phoneBR(d.whatsapp), 'required inputmode="tel" placeholder="(42) 99999-9999"') +
+      field('Cidade', 'city', real(d.city), 'placeholder="Ex.: Ponta Grossa"') +
+      field('Chave PIX', 'pixKey', real(d.pixKey), 'placeholder="CPF, CNPJ, e-mail, celular ou chave aleatória"') +
+      field('Nome do titular do PIX', 'pixName', real(d.pixName), 'placeholder="Como aparece no banco"') +
+      field('Endereço de retirada', 'pickupAddress', real(d.pickupAddress), 'placeholder="Rua, número — bairro"', true) +
+      field('Horário de atendimento e retirada (opcional)', 'hours', d.hours || '', 'placeholder="Ex.: seg a sex, 9h às 18h; sáb, 9h às 12h"', true) +
+      field('Instagram (opcional)', 'instagram', d.instagram || '', 'placeholder="@jmstore"') +
+      '<div class="field field--full"><span>Regiões de entrega <small>(nome · bairros · frete · prazo)</small></span>' +
+        '<small>Frete fixo por região. Sem nenhuma região, a loja oferece só a retirada.</small>' +
+        '<div class="zones" id="zones">' + (d.shippingZones || []).map(zoneRow).join('') + '</div>' +
+        '<button type="button" class="link" data-zone-add style="justify-self:start">+ Adicionar região</button></div>' +
+      '</div>' + foot('Salvar dados da loja'), function (fd) {
+      var wa = digits(fd.get('whatsapp'));
+      if (wa.length === 10 || wa.length === 11) wa = '55' + wa;
+      if (wa.length < 12 || wa.length > 13) { toast('Digite o WhatsApp com DDD, ex.: (42) 99999-9999.'); return false; }
+      var names = fd.getAll('zName'), zones = [], bad = false;
+      names.forEach(function (n, i) {
+        n = n.trim();
+        var hoods = fd.getAll('zHoods')[i].split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+        var feeRaw = fd.getAll('zFee')[i], days = fd.getAll('zDays')[i].trim();
+        if (!n && !hoods.length && feeRaw === '' && !days) return; // linha vazia
+        if (!n || feeRaw === '') { bad = true; return; }
+        var id = n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'regiao';
+        while (zones.some(function (z) { return z.id === id; })) id += '-2';
+        zones.push({ id: id, name: n, neighborhoods: hoods, fee: round(num(feeRaw)), days: days });
+      });
+      if (bad) { toast('Cada região precisa de nome e valor do frete (pode ser 0).'); return false; }
+      var doc = siteDoc();
+      if (!doc) { doc = { id: 'loja' }; db.site = (db.site || []).concat([doc]); }
+      Object.assign(doc, {
+        whatsapp: wa, city: fd.get('city').trim(), pixKey: fd.get('pixKey').trim(), pixName: fd.get('pixName').trim(),
+        pickupAddress: fd.get('pickupAddress').trim(), hours: fd.get('hours').trim(),
+        instagram: fd.get('instagram').trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/\/.*$/, ''),
+        shippingZones: zones
+      });
+      return function () { toast(lojaFaltando().length ? 'Dados salvos. Ainda falta: ' + lojaFaltando().join(', ') + '.' : 'Dados da loja salvos. Já aparecem no site.'); };
+    });
+    modalForm.onclick = function (e) {
+      if (e.target.hasAttribute('data-zone-add')) { $('#zones').insertAdjacentHTML('beforeend', zoneRow()); $('#zones .zone-row:last-child input').focus(); }
+      if (e.target.hasAttribute('data-zone-rm')) e.target.parentNode.remove();
+    };
+  }
+  function storePanel() {
+    var d = storeData(), miss = lojaFaltando(), zones = d.shippingZones || [];
+    var row = function (label, value) { return '<dt>' + label + '</dt><dd>' + (value || '<span class="pill pill--warn">Falta preencher</span>') + '</dd>'; };
+    return '<section class="panel store-data"><div class="store-data__head"><h2>Dados da loja</h2>' +
+        '<button class="btn" data-action="store-edit">Editar dados da loja</button></div>' +
+      (miss.length ? '<p class="notice">Antes de divulgar o site, preencha: <b>' + miss.join(', ') + '</b>.</p>' : '<p class="notice notice--ok">✓ Tudo preenchido. A loja está pronta para divulgar.</p>') +
+      '<dl>' + row('WhatsApp', digits(d.whatsapp) ? esc(phoneBR(d.whatsapp)) : '') + row('Cidade', esc(real(d.city))) +
+        row('Chave PIX', esc(real(d.pixKey))) + row('Titular do PIX', esc(real(d.pixName))) +
+        row('Retirada', esc(real(d.pickupAddress))) + '<dt>Horário</dt><dd>' + (d.hours ? esc(d.hours) : '<span class="muted">—</span>') + '</dd>' +
+        '<dt>Instagram</dt><dd>' + (d.instagram ? '@' + esc(d.instagram) : '<span class="muted">—</span>') + '</dd>' +
+        row('Entrega', siteDoc() && Array.isArray(siteDoc().shippingZones) ? (zones.length ? zones.map(function (z) { return esc(z.name) + ' ' + brl(z.fee); }).join(' · ') : 'Só retirada na loja') : '') +
+      '</dl></section>';
   }
 
   function newRequests() { return (db.requests || []).filter(function (r) { return r.status === 'novo'; }); }
@@ -669,7 +764,9 @@
 
   function viewDados() {
     return '' +
-      '<div class="head"><div><h1>Backup dos dados</h1><p class="muted">' + (cloud
+      '<div class="head"><div><h1>Ajustes</h1></div></div>' +
+      (cloud ? storePanel() : '') +
+      '<div class="head" style="margin-top:2rem"><div><h2 style="font-size:1.8rem">Backup dos dados</h2><p class="muted">' + (cloud
         ? 'Os dados ficam salvos na nuvem. Mesmo assim, guarde uma cópia de vez em quando.'
         : 'Os dados ficam guardados só neste navegador. Exporte com frequência.') + '</p></div></div>' +
       '<div class="backup">' +
@@ -1331,6 +1428,7 @@
     },
     'new-customer': function () { customerForm(null); },
     'new-coupon': function () { couponForm(null); },
+    'store-edit': function () { storeForm(); },
     'bulk-clear': function (kind) { sel[kind] = {}; render(); },
     'bulk-delete': function (kind) {
       var ids = sel[kind], n = Object.keys(ids).length;
@@ -1518,7 +1616,7 @@
   window.addEventListener('hashchange', function () { render(); app.focus(); });
   if (!cloud) {
     db = loadLocal() || seed();
-    db.orders = []; db.catalog = []; db.requests = [];
+    db.orders = []; db.catalog = []; db.requests = []; db.site = [];
     ensureBasics();
     render();
   } else {

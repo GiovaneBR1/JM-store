@@ -499,7 +499,7 @@
       return;
     }
     var zones = C.shippingZones.map(function (z) {
-      return '<option value="' + z.id + '">' + esc(z.name) + ' — ' + brl(z.fee) + ' (' + esc(z.days) + ')</option>';
+      return '<option value="' + esc(z.id) + '">' + esc(z.name) + ' — ' + (z.fee ? brl(z.fee) : 'frete grátis') + (z.days ? ' (' + esc(z.days) + ')' : '') + '</option>';
     }).join('');
     var chip = function (name, value, text, checked) {
       return '<label class="chip"><input type="radio" name="' + name + '" value="' + value + '"' + (checked ? ' checked' : '') + '><span>' + text + '</span></label>';
@@ -512,7 +512,8 @@
         field('f-phone', 'WhatsApp', '<input id="f-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000" required>') +
       '</div></fieldset>' +
       '<fieldset class="block"><legend>Entrega</legend><div class="chips" style="margin-bottom:1.25rem">' +
-        chip('delivery', 'delivery', 'Entregar no meu endereço', true) + chip('delivery', 'pickup', 'Retirar na loja (grátis)') + '</div>' +
+        (C.shippingZones.length ? chip('delivery', 'delivery', 'Entregar no meu endereço', true) + chip('delivery', 'pickup', 'Retirar na loja (grátis)')
+          : chip('delivery', 'pickup', 'Retirar na loja (grátis)', true)) + '</div>' +
         '<div id="addr" class="cols">' +
           '<div class="wide">' + field('f-zone', 'Região', '<select id="f-zone" name="zone" required><option value="">Escolha sua região</option>' + zones + '</select>', 'Não achou sua região? Fale com a gente no WhatsApp.') + '</div>' +
           field('f-hood', 'Bairro', '<input id="f-hood" name="hood" required>') +
@@ -547,7 +548,7 @@
     var form = $('#co');
     if (AUTH.user && AUTH.user.name) form.fullname.value = AUTH.user.name;
     var zoneOf = function () { return C.shippingZones.find(function (z) { return z.id === form.zone.value; }); };
-    var isPickup = function () { return form.delivery.value === 'pickup'; };
+    var isPickup = function () { return !C.shippingZones.length || form.delivery.value === 'pickup'; };
     var fee = function () { if (isPickup()) return 0; var z = zoneOf(); return z ? z.fee : null; };
     var coupon = null;
     var discount = function () {
@@ -560,7 +561,7 @@
       $('#addr').hidden = pick;
       $('#pickup').hidden = !pick;
       var f = fee(), d = discount();
-      $('#t-ship').textContent = pick ? 'Grátis (retirada)' : f == null ? 'Escolha a região' : brl(f);
+      $('#t-ship').textContent = pick ? 'Grátis (retirada)' : f == null ? 'Escolha a região' : f ? brl(f) : 'Grátis';
       $('#t-disc-row').hidden = !d;
       if (d) { $('#t-disc-label').textContent = 'Cupom ' + coupon.code; $('#t-disc').textContent = '− ' + brl(d); }
       $('#t-total').textContent = brl(subtotal() - d + (f || 0));
@@ -636,7 +637,7 @@
         '',
         'Subtotal: ' + brl(subtotal()),
         disc ? 'Cupom ' + coupon.code + ': − ' + brl(disc) : null,
-        'Frete: ' + (isPickup() ? 'grátis (retirada)' : brl(ship) + ' (' + zoneOf().name + ')'),
+        'Frete: ' + (isPickup() ? 'grátis (retirada)' : (ship ? brl(ship) : 'grátis') + ' (' + zoneOf().name + ')'),
         '*Total: ' + brl(total) + '*',
         '',
         '*Cliente*',
@@ -856,6 +857,39 @@
     window.scrollTo(0, 0);
   }
 
+  // ---------- política de privacidade ----------
+  // Modelo baseado na LGPD (Lei 13.709/2018). Não substitui a orientação de um advogado.
+  var PRIVACY_DATE = '16/11/2026';
+  function viewPrivacy() {
+    document.title = 'Política de privacidade — JM Store';
+    var wa = '<a href="' + waLink('Olá! Tenho uma dúvida sobre os meus dados.') + '" target="_blank" rel="noopener">WhatsApp</a>';
+    var mail = C.email ? ' ou pelo e-mail <a href="mailto:' + esc(C.email) + '">' + esc(C.email) + '</a>' : '';
+    var city = C.city && C.city !== 'Sua Cidade' ? ', de ' + esc(C.city) + ',' : '';
+    var sec = function (t, body) { return '<section><h2>' + t + '</h2>' + body + '</section>'; };
+    app.innerHTML = '<div class="wrap"><article class="legal">' +
+      '<nav class="crumbs" aria-label="Você está em"><a href="#/">Início</a> / Política de privacidade</nav>' +
+      '<h1>Política de privacidade</h1><p class="note">Atualizada em ' + PRIVACY_DATE + '.</p>' +
+      '<p>A ' + esc(C.storeName) + city + ' respeita a sua privacidade. Aqui explicamos, sem juridiquês, quais dados guardamos quando você usa o site, para que servem e como você pode pedir para ver, corrigir ou apagar. Seguimos a Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).</p>' +
+      sec('Quais dados guardamos', '<ul>' +
+        '<li><b>Conta:</b> nome e e-mail (ou os dados da sua conta Google, se você entrar com ela). A senha fica protegida pelo Google Firebase; nós não temos acesso a ela.</li>' +
+        '<li><b>Pedidos:</b> produtos, valores, forma de pagamento, nome, WhatsApp e, para entrega, o endereço.</li>' +
+        '<li><b>Pedidos personalizados:</b> a descrição, o modelo, o link e a foto de referência que você enviar.</li>' +
+        '<li><b>Devoluções:</b> o motivo e os detalhes que você escrever.</li>' +
+        '<li><b>No seu navegador:</b> a sacola e a escolha de tema claro/escuro ficam salvas só no seu aparelho. Não usamos cookies de propaganda nem rastreadores.</li></ul>') +
+      sec('Para que usamos', '<ul>' +
+        '<li>Separar, entregar e cobrar os seus pedidos, e mostrar o andamento em Meus pedidos.</li>' +
+        '<li>Falar com você sobre o pedido pelo WhatsApp e mandar e-mails de confirmação e de mudança de status.</li>' +
+        '<li>Procurar o produto do seu pedido personalizado e responder com preço e prazo.</li>' +
+        '<li>Cumprir obrigações legais, como registros de venda.</li></ul>' +
+        '<p>Só enviaremos novidades e ofertas se você autorizar, e você pode parar de receber quando quiser.</p>') +
+      sec('Com quem compartilhamos', '<p>Não vendemos nem alugamos os seus dados. Eles ficam guardados nos servidores do <b>Google Firebase</b>, que hospeda o site e o banco de dados. Quando você envia o pedido pelo <b>WhatsApp</b>, a conversa segue as regras do próprio WhatsApp. Também podemos compartilhar dados quando a lei ou uma autoridade exigir.</p>') +
+      sec('Por quanto tempo', '<p>Guardamos os dados enquanto você tiver conta na loja e pelo tempo exigido por lei para registros de venda. Pedidos personalizados e fotos de referência podem ser apagados quando não forem mais necessários.</p>') +
+      sec('Seus direitos', '<p>Você pode, a qualquer momento, pedir para saber quais dados temos sobre você, corrigir dados errados, apagar a sua conta e os seus dados (menos o que a lei manda guardar) ou retirar uma autorização que tenha dado. É só falar com a gente pelo ' + wa + mail + '. Respondemos em até 15 dias.</p>') +
+      sec('Segurança', '<p>O site usa conexão segura (HTTPS), e cada cliente só consegue ver os próprios pedidos. Apenas a equipe da loja acessa a gestão.</p>') +
+      sec('Mudanças nesta política', '<p>Se esta política mudar, a data no topo da página será atualizada.</p>') +
+      '</article></div>';
+  }
+
   // ---------- meus pedidos ----------
   function orderDate(o) {
     var d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : new Date();
@@ -985,6 +1019,7 @@
     else if (parts[0] === 'categoria') viewCategory(parts[1]);
     else if (parts[0] === 'checkout') viewCheckout();
     else if (parts[0] === 'personalizado') viewCustom();
+    else if (parts[0] === 'privacidade') viewPrivacy();
     else viewHome();
     if (!first) { window.scrollTo(0, 0); app.focus({ preventScroll: true }); }
     first = false;
@@ -1030,14 +1065,27 @@
   $('#search-form').addEventListener('submit', function (e) { e.preventDefault(); state.q = search.value; gotoCatalog(); });
 
   // ---------- boot ----------
-  var waHello = waLink('Olá! Vim pelo site da JM Store.');
-  $('#wa-float').href = waHello;
-  $('#foot-wa').href = waHello;
-  $('#foot-pickup').textContent = 'Retirada: ' + C.pickupAddress;
+  // Dados da loja editados na gestão (Ajustes → Dados da loja) substituem os do js/config.js.
+  function applySite(d) {
+    if (!d) return;
+    ['whatsapp', 'pixKey', 'pixName', 'city', 'instagram'].forEach(function (k) { if (d[k]) C[k] = d[k]; });
+    if (d.pickupAddress) C.pickupAddress = d.pickupAddress + (d.hours ? ' — ' + d.hours : '');
+    if (Array.isArray(d.shippingZones)) C.shippingZones = d.shippingZones;
+  }
+  function paintContacts() {
+    var waHello = waLink('Olá! Vim pelo site da JM Store.');
+    $('#wa-float').href = waHello;
+    $('#foot-wa').href = waHello;
+    $('#foot-pickup').textContent = 'Retirada: ' + C.pickupAddress;
+    var ig = $('#foot-ig');
+    if (C.instagram) { ig.hidden = false; $('a', ig).href = 'https://instagram.com/' + encodeURIComponent(C.instagram); $('a', ig).textContent = 'Instagram @' + C.instagram; }
+  }
   $('#year').textContent = new Date().getFullYear();
+  paintContacts();
   var started = false;
   function start() {
     started = true;
+    paintContacts();
     cart = load();
     save();
     window.addEventListener('hashchange', route);
@@ -1050,7 +1098,9 @@
   if (AUTH.enabled) {
     app.innerHTML = '<div class="wrap done"><p>Carregando produtos…</p></div>';
     var fs = AUTH.firestore();
-    Promise.all([fs.collection('catalog').get(), fs.collection('categories').get()]).then(function (r) {
+    Promise.all([fs.collection('catalog').get(), fs.collection('categories').get(),
+      fs.collection('site').doc('loja').get().catch(function () { return null; })]).then(function (r) {
+      if (r[2] && r[2].exists) applySite(r[2].data());
       P = r[0].docs.map(function (d) { return SHOP.normalize(Object.assign({ id: d.id }, d.data())); });
       CATS = r[1].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       start();

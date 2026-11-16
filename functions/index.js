@@ -33,6 +33,26 @@ const ms = (t) => (t && t.toMillis ? t.toMillis() : typeof t === 'number' ? t : 
 const diaLocal = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: FUSO }).format(d); // AAAA-MM-DD
 const dataBR = (d) => new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, day: '2-digit', month: '2-digit' }).format(d);
 
+// Dados da loja salvos na gestão (site/loja) por cima dos padrões de loja.js; relidos a cada 5 minutos.
+const PADRAO_LOJA = Object.assign({}, LOJA);
+let lojaLida = 0;
+async function carregarLoja() {
+  if (Date.now() - lojaLida < 5 * 60e3) return;
+  try {
+    const d = await admin.firestore().collection('site').doc('loja').get();
+    const s = d.exists ? d.data() : {};
+    Object.assign(LOJA, PADRAO_LOJA, {
+      whatsapp: s.whatsapp || PADRAO_LOJA.whatsapp,
+      pixChave: s.pixKey || PADRAO_LOJA.pixChave,
+      pixNome: s.pixName || PADRAO_LOJA.pixNome,
+      retirada: s.pickupAddress ? s.pickupAddress + (s.hours ? ' — ' + s.hours : '') : PADRAO_LOJA.retirada
+    });
+    lojaLida = Date.now();
+  } catch (e) { logger.error('Falha ao ler os dados da loja', { erro: e.message }); }
+}
+// Todo gatilho lê os dados da loja antes de montar os e-mails.
+const comLoja = (fn) => async (...a) => { await carregarLoja(); return fn(...a); };
+
 // ---------- envio ----------
 let transporte;
 function enviarEmail(para, assunto, html, anexos) {
@@ -119,7 +139,7 @@ const STATUS = {
   confirmado: ['Seu pedido #{c} foi confirmado', 'Separamos seus produtos. Avisamos quando ele sair para entrega ou estiver pronto para retirada.'],
   pago: ['Pagamento do pedido #{c} confirmado', 'Recebemos seu pagamento. Obrigada!'],
   enviado: ['Seu pedido #{c} saiu para entrega', 'Ele está a caminho do endereço que você informou.'],
-  retirar: ['Seu pedido #{c} está pronto para retirada', 'Você já pode retirar na loja: ' + LOJA.retirada + '.'],
+  retirar: ['Seu pedido #{c} está pronto para retirada', 'Você já pode retirar na loja: {retirada}.'],
   entregue: ['Compra #{c} finalizada', 'Obrigada pela compra! Se algo não estiver certo, você pode pedir a devolução em até 7 dias em Meus pedidos.'],
   cancelado: ['Pedido #{c} cancelado', 'Seu pedido foi cancelado. Se tiver alguma dúvida, fale com a gente pelo WhatsApp.']
 };
@@ -137,7 +157,7 @@ function emailCliente(o, assunto, texto, nota) {
 }
 
 // ---------- gatilhos ----------
-exports.pedidoCriado = onDocumentCreated({ document: 'orders/{id}', ...OPCOES }, async (event) => {
+exports.pedidoCriado = onDocumentCreated({ document: 'orders/{id}', ...OPCOES }, comLoja(async (event) => {
   const o = event.data && event.data.data();
   if (!o || o.demo) return;
   const c = o.customer || {}, cfg = await ajustes();
@@ -155,9 +175,9 @@ exports.pedidoCriado = onDocumentCreated({ document: 'orders/{id}', ...OPCOES },
     enviarEmail(c.email, ok ? `Seu pedido #${o.code} está confirmado — ${LOJA.nome}` : `Recebemos seu pedido #${o.code} — ${LOJA.nome}`, emailClientePedidoRecebido(o)),
     notificarLoja(`🛍️ Novo pedido #${o.code}`, `${c.name || 'Cliente'} · ${brl(o.total)} · ${o.payment || ''}${ok ? ' · confirmado' : faltam.length ? ' · falta estoque' : ''}`, '#/pedidos')
   ]);
-});
+}));
 
-exports.pedidoAtualizado = onDocumentUpdated({ document: 'orders/{id}', ...OPCOES }, async (event) => {
+exports.pedidoAtualizado = onDocumentUpdated({ document: 'orders/{id}', ...OPCOES }, comLoja(async (event) => {
   const antes = event.data.before.data(), o = event.data.after.data();
   if (!o || o.demo) return;
   const email = o.customer && o.customer.email, tarefas = [];
@@ -165,6 +185,7 @@ exports.pedidoAtualizado = onDocumentUpdated({ document: 'orders/{id}', ...OPCOE
   const jaAvisado = o.status === 'confirmado' && o.autoConfirmed && !antes.autoConfirmed;
   if (antes.status !== o.status && STATUS[o.status] && !jaAvisado) {
     let [assunto, texto] = STATUS[o.status];
+    texto = texto.replace('{retirada}', LOJA.retirada);
     if (o.status === 'cancelado' && o.autoCancelled) texto = 'Cancelamos seu pedido porque não recebemos o pagamento a tempo. Se ainda quiser os produtos, é só fazer um novo pedido ou falar com a gente pelo WhatsApp.';
     tarefas.push(enviarEmail(email, assunto.replace('{c}', o.code), emailCliente(o, assunto.replace('{c}', o.code), texto)));
   }
@@ -181,7 +202,7 @@ exports.pedidoAtualizado = onDocumentUpdated({ document: 'orders/{id}', ...OPCOE
     tarefas.push(enviarEmail(email, assunto.replace('{c}', o.code), emailCliente(o, assunto.replace('{c}', o.code), texto, rd.note)));
   }
   await Promise.all(tarefas);
-});
+}));
 
 // ---------- pedidos personalizados ----------
 const PERSONALIZADO = {
@@ -202,7 +223,7 @@ function anexoFoto(r) {
   return m ? [{ filename: `referencia-${r.code}.${m[1].split('/')[1].replace('jpeg', 'jpg')}`, content: Buffer.from(m[2], 'base64'), contentType: m[1], cid: 'foto-ref' }] : [];
 }
 
-exports.personalizadoCriado = onDocumentCreated({ document: 'requests/{id}', ...OPCOES }, async (event) => {
+exports.personalizadoCriado = onDocumentCreated({ document: 'requests/{id}', ...OPCOES }, comLoja(async (event) => {
   const r = event.data && event.data.data();
   if (!r || r.demo) return;
   const c = r.customer || {}, foto = anexoFoto(r);
@@ -216,9 +237,9 @@ exports.personalizadoCriado = onDocumentCreated({ document: 'requests/{id}', ...
       { texto: 'Acompanhar em Meus pedidos', url: LOJA.site + '#/pedidos' })),
     notificarLoja(`✨ Pedido personalizado #${r.code}`, `${c.name || 'Cliente'}: ${String(r.desc || '').slice(0, 80)}`, '#/pedidos')
   ]);
-});
+}));
 
-exports.personalizadoAtualizado = onDocumentUpdated({ document: 'requests/{id}', ...OPCOES }, async (event) => {
+exports.personalizadoAtualizado = onDocumentUpdated({ document: 'requests/{id}', ...OPCOES }, comLoja(async (event) => {
   const antes = event.data.before.data(), r = event.data.after.data();
   if (!r || r.demo) return;
   const mudouStatus = antes.status !== r.status && PERSONALIZADO[r.status];
@@ -229,11 +250,11 @@ exports.personalizadoAtualizado = onDocumentUpdated({ document: 'requests/{id}',
     `<p style="margin:0 0 10px;font-size:15px">Olá, ${esc(primeiroNome(r.customer && r.customer.name))}! ${esc(texto)}</p>` +
     (r.note ? `<p style="margin:0 0 10px;padding:10px 12px;background:#FBF6F3;border-radius:6px;font-size:14px"><b>Mensagem da loja:</b> ${esc(r.note)}</p>` : '') + pedidoHtml(r),
     { texto: 'Responder no WhatsApp', url: 'https://wa.me/' + LOJA.whatsapp + '?text=' + encodeURIComponent('Olá! Sobre o meu pedido personalizado #' + r.code + '.') }));
-});
+}));
 
 // ---------- alerta de estoque baixo ----------
 // Avisa só quando o produto cruza o mínimo (ou esgota), para não repetir o aviso a cada venda.
-exports.estoqueAtualizado = onDocumentUpdated({ document: 'products/{id}', ...OPCOES }, async (event) => {
+exports.estoqueAtualizado = onDocumentUpdated({ document: 'products/{id}', ...OPCOES }, comLoja(async (event) => {
   const antes = event.data.before.data(), p = event.data.after.data();
   if (!p) return;
   const a = totalStock(antes), d = totalStock(p), min = p.minStock || 0;
@@ -248,7 +269,7 @@ exports.estoqueAtualizado = onDocumentUpdated({ document: 'products/{id}', ...OP
       { texto: 'Dar entrada no estoque', url: LOJA.site + 'admin.html#/produtos' })),
     notificarLoja((esgotou ? '📦 ' : '⚠️ ') + titulo, texto, '#/produtos')
   ]);
-});
+}));
 
 // ---------- rotina de hora em hora: lembretes e cancelamentos ----------
 async function rotina(agora) {
@@ -298,7 +319,7 @@ async function rotina(agora) {
     }
   }
 }
-exports.rotinaHoraria = onSchedule({ schedule: 'every 60 minutes', timeZone: FUSO, ...OPCOES }, () => rotina(Date.now()));
+exports.rotinaHoraria = onSchedule({ schedule: 'every 60 minutes', timeZone: FUSO, ...OPCOES }, comLoja(() => rotina(Date.now())));
 
 // ---------- resumo diário para a dona (8h) ----------
 async function resumo(agora) {
@@ -337,7 +358,7 @@ async function resumo(agora) {
   await enviarEmail(LOJA.emailLoja, `☀️ Resumo da ${LOJA.nome} — ${dataBR(new Date(agora))}`, html);
   return html;
 }
-exports.resumoDiario = onSchedule({ schedule: '0 8 * * *', timeZone: FUSO, ...OPCOES }, () => resumo(Date.now()));
+exports.resumoDiario = onSchedule({ schedule: '0 8 * * *', timeZone: FUSO, ...OPCOES }, comLoja(() => resumo(Date.now())));
 
 // Usado só pelos testes.
-if (process.env.JM_TEST) exports._test = { rotina, resumo, anexoFoto };
+if (process.env.JM_TEST) exports._test = { rotina: comLoja(rotina), resumo: comLoja(resumo), anexoFoto, recarregarLoja: () => { lojaLida = 0; } };

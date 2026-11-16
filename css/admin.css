@@ -400,3 +400,20 @@ tr.is-sel td { background: var(--pastel-soft); }
   body:has(.bulk) #app { padding-bottom: 6.5rem; }
   body:has(.bulk) .toast { bottom: 7.5rem; }
 }
+
+/* Dados da loja (Ajustes) */
+.store-data { margin-top: .5rem; }
+.store-data__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.store-data .notice { margin-bottom: .9rem; }
+.store-data dl { display: grid; grid-template-columns: max-content 1fr; gap: .45rem 1.25rem; margin: 0; font-size: .95rem; }
+.store-data dt { color: var(--brown-2); }
+.store-data dd { margin: 0; overflow-wrap: anywhere; }
+.zones { display: grid; gap: .45rem; margin: .35rem 0 .25rem; }
+.zone-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) 6rem minmax(0, 1fr) auto; gap: .45rem; align-items: center; }
+.zone-row input { width: 100%; border: 1px solid var(--rosa); background: var(--field); color: inherit; border-radius: var(--r-md); padding: .45rem .55rem; }
+@media (max-width: 760px) {
+  .zone-row { grid-template-columns: minmax(0, 1fr) 5.5rem auto; padding-bottom: .45rem; border-bottom: 1px solid var(--pastel-soft); }
+  .zone-row [name=zHoods], .zone-row [name=zDays] { grid-column: 1 / 3; }
+  .zone-row [name=zHoods] { order: 4; } .zone-row [name=zDays] { order: 5; }
+  .store-data dl { grid-template-columns: 1fr; gap: .1rem; } .store-data dd { margin-bottom: .45rem; }
+}

@@ -1,4 +1,5 @@
-// Dados da loja usados nos e-mails. Mantenha igual ao js/config.js do site.
+// Dados da loja usados nos e-mails. WhatsApp, PIX e retirada são valores padrão:
+// os que a dona salva em Gestão → Ajustes → Dados da loja (documento site/loja) substituem estes.
 module.exports = {
   nome: 'JM Store',
   site: 'https://giovanebr1.github.io/JM-store/',

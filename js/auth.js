@@ -68,6 +68,7 @@
       (isNew ? '' : '<button type="button" class="auth__link" data-auth="reset">Esqueci minha senha</button>') +
       '<p class="auth__switch">' + (isNew ? 'Já tem conta? ' : 'Ainda não tem conta? ') +
         '<button type="button" class="auth__link" data-auth="' + (isNew ? 'login' : 'signup') + '">' + (isNew ? 'Entrar' : 'Criar conta') + '</button></p>' +
+      '<p class="auth__legal">Ao continuar, você concorda com a nossa <a href="./#/privacidade" data-auth="close">Política de privacidade</a>.</p>' +
       '</form>';
 
     var form = $('form', dlg), err = $('.auth__err', dlg);
