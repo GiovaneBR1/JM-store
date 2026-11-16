@@ -7,7 +7,7 @@
   var KEY = 'jm-admin-v1';
   var AUTH = window.JMAuth;
   var cloud = !!(AUTH && AUTH.enabled);
-  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders', 'categories', 'settings'];
+  var COLS = ['products', 'customers', 'sales', 'coupons', 'catalog', 'orders', 'categories', 'settings', 'requests'];
   var SHOP = window.JMShop;
   // Status dos pedidos do site (os mesmos rótulos aparecem para o cliente em "Meus pedidos").
   var ORDER_STATUS = [
@@ -16,6 +16,11 @@
     ['entregue', 'Finalizado', 'neutral'], ['cancelado', 'Cancelado', 'err']
   ];
   var CLIENT_LABEL = { novo: 'aguardando confirmação', confirmado: 'confirmado', pago: 'pago', enviado: 'saiu para entrega', retirar: 'pronto para retirada', entregue: 'finalizado', cancelado: 'cancelado' };
+  // Pedidos personalizados (o cliente vê os mesmos passos em "Meus pedidos").
+  var REQ_STATUS = [
+    ['novo', 'Novo', 'warn'], ['orcado', 'Orçamento enviado', 'ok'], ['encomendado', 'Encomendado', 'ok'],
+    ['chegou', 'Chegou na loja', 'ok'], ['concluido', 'Finalizado', 'neutral'], ['recusado', 'Não encontrado', 'err']
+  ];
   var RETURN_STATUS = { solicitada: ['Devolução solicitada', 'warn'], aprovada: ['Devolução aprovada', 'ok'], recusada: ['Devolução recusada', 'err'], concluida: ['Devolvido', 'neutral'] };
   // Categorias iniciais (as três primeiras aparecem na vitrine); depois a loja cria as suas na gestão.
   var DEFAULT_CATS = (window.JM_CATEGORIES || []).map(function (c, i) { return { id: c.slug, name: c.name, order: i, featured: i < 3 }; });
@@ -192,7 +197,7 @@
 
   // Catálogo e pedidos do site não fazem parte do backup: são mantidos ao reiniciar ou importar.
   function keepCloud(data) {
-    return Object.assign({ categories: (db && db.categories) || [], settings: (db && db.settings) || [] }, data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [] });
+    return Object.assign({ categories: (db && db.categories) || [], settings: (db && db.settings) || [] }, data, { catalog: (db && db.catalog) || [], orders: (db && db.orders) || [], requests: (db && db.requests) || [] });
   }
 
   function applySnap(col, snap) {
@@ -209,7 +214,7 @@
   function startCloud() {
     stopCloud();
     app.innerHTML = '<p class="empty">Carregando os dados da loja…</p>';
-    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [], categories: [], settings: [] };
+    var fs = AUTH.firestore(), loaded = {}, fresh = { products: [], customers: [], sales: [], coupons: [], catalog: [], orders: [], categories: [], settings: [], requests: [] };
     COLS.forEach(function (col) {
       unsubs.push(fs.collection(col).onSnapshot(function (snap) {
         if (!loaded[col]) {
@@ -218,6 +223,12 @@
           applySnap(col, snap);
           if (COLS.every(function (c) { return loaded[c]; })) firstLoad();
           return;
+        }
+        if (col === 'requests') {
+          snap.docChanges().forEach(function (ch) {
+            var r = ch.doc.data();
+            if (ch.type === 'added' && r.status === 'novo') toast('✨ Pedido personalizado #' + r.code + ' de ' + r.customer.name + '!');
+          });
         }
         if (col === 'orders') {
           snap.docChanges().forEach(function (ch) {
@@ -313,6 +324,7 @@
     var low = db.products.filter(function (p) { return totalStock(p) <= p.minStock; }).sort(function (a, b) { return totalStock(a) - totalStock(b); });
     return '' +
       (newOrders().length ? '<p class="notice notice--ok">🛍️ ' + newOrders().length + ' pedido(s) do site esperando você. <a href="#/pedidos">Ver pedidos</a></p>' : '') +
+      (newRequests().length ? '<p class="notice notice--ok">✨ ' + newRequests().length + ' pedido(s) personalizado(s) para responder. <a href="#/pedidos" data-req-filter>Ver pedidos personalizados</a></p>' : '') +
       '<div class="head"><div><h1>Painel</h1></div>' +
       '<div class="actions"><button class="btn" data-action="new-sale">+ Nova venda</button></div></div>' +
       window.JMPainel.html(painelCtx()) +
@@ -431,6 +443,7 @@
         }).join('') + '</tbody></table></div>' : '<p class="empty">Nenhum cliente cadastrado ainda.</p>');
   }
 
+  function newRequests() { return (db.requests || []).filter(function (r) { return r.status === 'novo'; }); }
   function newOrders() { return (db.orders || []).filter(function (o) { return o.status === 'novo' || (o['return'] && o['return'].status === 'solicitada'); }); }
   function orderOfSale(saleId) { return (db.orders || []).find(function (o) { return o.saleId === saleId; }); }
 
@@ -467,19 +480,14 @@
   filters.pedidos = { status: 'abertos' };
   function viewPedidos() {
     var f = filters.pedidos;
+    if (f.status === 'personalizados') return pedidosHead(f, (db.requests || []).length, 'pedido(s) personalizado(s)') + requestsHtml();
     var list = (db.orders || []).filter(function (o) {
       var r = o['return'];
       if (f.status === 'abertos') return (o.status !== 'entregue' && o.status !== 'cancelado') || (r && (r.status === 'solicitada' || r.status === 'aprovada'));
       if (f.status === 'devolucoes') return !!r;
       return !f.status || o.status === f.status;
     }).sort(function (a, b) { return orderMillis(b) - orderMillis(a); });
-    return '' +
-      '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
-      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '<div class="push-card" id="push-card"><b>Avisos de pedido neste aparelho</b><span class="muted">Verificando…</span></div>' + autoPanel()) +
-      '<div class="toolbar"><select data-filter="pedidos.status" aria-label="Status">' +
-        opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) + opt('devolucoes', 'Devoluções', f.status) +
-        ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
-        '<span class="count">' + list.length + ' pedido(s)</span></div>' +
+    return pedidosHead(f, list.length, 'pedido(s)') +
       (list.length ? '<div class="orders">' + list.map(function (o) {
         var st = ORDER_STATUS.find(function (s) { return s[0] === o.status; }) || ORDER_STATUS[0];
         var first = (o.customer.name || '').split(' ')[0];
@@ -503,6 +511,46 @@
             (wa ? '<a class="btn btn--ghost btn--sm" href="' + wa + '" target="_blank" rel="noopener">Avisar cliente no WhatsApp</a>' : '') +
           '</footer></article>';
       }).join('') + '</div>' : '<p class="empty">Nenhum pedido aqui.</p>');
+  }
+
+  function pedidosHead(f, count, noun) {
+    var nr = newRequests().length;
+    return '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
+      (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '<div class="push-card" id="push-card"><b>Avisos de pedido neste aparelho</b><span class="muted">Verificando…</span></div>' + autoPanel()) +
+      (nr && f.status !== 'personalizados' ? '<p class="notice notice--ok">✨ ' + nr + ' pedido(s) personalizado(s) para responder. <a href="#/pedidos" data-req-filter>Ver</a></p>' : '') +
+      '<div class="toolbar"><select data-filter="pedidos.status" aria-label="Status">' +
+        opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) + opt('devolucoes', 'Devoluções', f.status) +
+        opt('personalizados', 'Personalizados' + (nr ? ' (' + nr + ' novo' + (nr > 1 ? 's' : '') + ')' : ''), f.status) +
+        ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
+        '<span class="count">' + count + ' ' + noun + '</span></div>';
+  }
+
+  function requestsHtml() {
+    var list = (db.requests || []).slice().sort(function (a, b) {
+      return (a.status === 'novo' ? 0 : 1) - (b.status === 'novo' ? 0 : 1) || orderMillis(b) - orderMillis(a);
+    });
+    if (!list.length) return '<p class="empty">Nenhum pedido personalizado ainda. Eles chegam pelo botão "Não achou o que procura?" da loja.</p>';
+    return '<div class="orders">' + list.map(function (r) {
+      var st = REQ_STATUS.find(function (s) { return s[0] === r.status; }) || REQ_STATUS[0];
+      var first = (r.customer.name || '').split(' ')[0];
+      var wa = waTo(r.customer.phone, 'Olá, ' + first + '! Aqui é da JM Store, sobre o seu pedido personalizado #' + r.code + ' (' + r.desc.slice(0, 80) + ').' + (r.note ? ' ' + r.note : ''));
+      return '<article class="panel order' + (r.status === 'novo' ? ' order--new' : '') + '">' +
+        '<header><div><h2>✨ #' + esc(r.code) + ' <span class="pill pill--' + st[2] + '">' + st[1] + '</span></h2>' +
+          '<p class="muted">' + orderWhen(r) + ' · <b>' + esc(r.customer.name) + '</b>' +
+          (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(r.customer.phone) + '</a>' : '') + '</p></div>' +
+          (r.budget ? '<b class="order__total">até ' + brl(r.budget) + '</b>' : '') + '</header>' +
+        '<div class="req">' + (r.photo ? '<button type="button" class="req__photo" data-action="req-photo" data-id="' + esc(r.id) + '" aria-label="Ver foto de referência"><img src="' + r.photo + '" alt=""></button>' : '') +
+          '<div><p><b>' + (r.qty || 1) + 'x</b> ' + esc(r.desc) + '</p>' +
+          (r.model ? '<p class="muted">Modelo/código: ' + esc(r.model) + '</p>' : '') +
+          (r.link ? '<p><a href="' + esc(r.link) + '" target="_blank" rel="noopener nofollow">Abrir link de referência ↗</a></p>' : '') +
+          (r.customer.email ? '<p class="muted">' + esc(r.customer.email) + '</p>' : '') + '</div></div>' +
+        (r.note ? '<p class="order__meta">💬 Resposta: ' + esc(r.note) + '</p>' : '') +
+        '<footer><label>Status <select data-req-status="' + esc(r.id) + '">' + REQ_STATUS.map(function (s) { return opt(s[0], s[1], r.status); }).join('') + '</select></label>' +
+          '<button class="btn btn--sm" data-action="req-note" data-id="' + esc(r.id) + '">' + (r.note ? 'Mudar resposta' : 'Responder (preço e prazo)') + '</button>' +
+          (wa ? '<a class="btn btn--ghost btn--sm" href="' + wa + '" target="_blank" rel="noopener">Falar no WhatsApp</a>' : '') +
+          '<button class="link link--danger" data-action="req-delete" data-id="' + esc(r.id) + '">Excluir</button>' +
+        '</footer></article>';
+    }).join('') + '</div>';
   }
 
   function autoPanel() {
@@ -673,7 +721,7 @@
     var r = ROUTES[route()] || ROUTES[''];
     app.innerHTML = (cloud ? '' : '<p class="notice">Login desligado: qualquer pessoa com o link abre esta página e os dados ficam só neste navegador. Veja no README como ativar o login.</p>') + r[1]();
     if (r[2]) r[2]();
-    var badge = $('#orders-badge'), n = newOrders().length;
+    var badge = $('#orders-badge'), n = newOrders().length + newRequests().length;
     if (badge) { badge.textContent = n; badge.hidden = !n; }
     $$('[data-nav]').forEach(function (a) {
       if (a.dataset.nav === r[0]) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -1222,6 +1270,25 @@
     },
     'new-customer': function () { customerForm(null); },
     'new-coupon': function () { couponForm(null); },
+    'req-photo': function (id) {
+      var r = db.requests.find(function (x) { return x.id === id; });
+      openModal('<h2>Foto de referência #' + esc(r.code) + '</h2><img class="req__full" src="' + r.photo + '" alt="Foto de referência enviada pelo cliente">' +
+        '<div class="modal__foot"><a class="btn btn--ghost" href="' + r.photo + '" download="referencia-' + esc(r.code) + '.jpg">Baixar foto</a><button class="btn" value="cancel" formnovalidate>Fechar</button></div>', function () { return true; });
+    },
+    'req-note': function (id) {
+      var r = db.requests.find(function (x) { return x.id === id; });
+      var note = prompt('Resposta para o cliente (aparece em Meus pedidos e vai por e-mail). Ex.: "Encontramos! R$ 250,00, chega em 10 dias."', r.note || '');
+      if (note === null) return;
+      r.note = note.trim().slice(0, 500);
+      if (r.note && r.status === 'novo') r.status = 'orcado';
+      save(); render(); toast(r.note ? 'Resposta salva. O cliente vê em Meus pedidos.' : 'Resposta apagada.');
+    },
+    'req-delete': function (id) {
+      var r = db.requests.find(function (x) { return x.id === id; });
+      if (!confirm('Excluir o pedido personalizado #' + r.code + '? O cliente deixa de ver em Meus pedidos.')) return;
+      db.requests = db.requests.filter(function (x) { return x !== r; });
+      save(); render(); toast('Pedido personalizado excluído.');
+    },
     'return-approve': function (id) {
       var o = db.orders.find(function (o) { return o.id === id; });
       var note = prompt('Mensagem para o cliente (opcional):', 'Devolução aprovada! Vamos combinar a retirada pelo WhatsApp.');
@@ -1294,6 +1361,7 @@
 
   app.addEventListener('click', function (e) {
     if (e.target.closest('[data-only-stale]')) { filters.produtos.sit = 'parados'; }
+    if (e.target.closest('[data-req-filter]')) { filters.pedidos.status = 'personalizados'; if (route() === 'pedidos') { e.preventDefault(); render(); } }
     var el = e.target.closest('[data-action]');
     if (!el || el.tagName === 'INPUT' || !ACTIONS[el.dataset.action]) return;
     ACTIONS[el.dataset.action](el.dataset.id);
@@ -1334,6 +1402,13 @@
       toast(cat.featured ? cat.name + ' aparece na vitrine.' : cat.name + ' saiu da vitrine.');
       return;
     }
+    var rid = e.target.dataset.reqStatus;
+    if (rid) {
+      var rq = db.requests.find(function (x) { return x.id === rid; });
+      rq.status = e.target.value;
+      save(); render(); toast('Pedido personalizado #' + rq.code + ': ' + e.target.selectedOptions[0].textContent + '.');
+      return;
+    }
     var oid = e.target.dataset.orderStatus;
     if (oid) {
       var o = db.orders.find(function (o) { return o.id === oid; });
@@ -1367,7 +1442,7 @@
   window.addEventListener('hashchange', function () { render(); app.focus(); });
   if (!cloud) {
     db = loadLocal() || seed();
-    db.orders = []; db.catalog = [];
+    db.orders = []; db.catalog = []; db.requests = [];
     ensureBasics();
     render();
   } else {

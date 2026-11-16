@@ -4,6 +4,7 @@
 // - Pedido de devolução: e-mail e notificação para a loja; resposta da loja: e-mail para o cliente.
 // - Automações (ajustes na gestão → Pedidos → Automações): confirmação automática com reserva de estoque,
 //   lembrete de PIX, cancelamento de PIX não pago, alerta de estoque baixo e resumo diário.
+// - Pedido personalizado: e-mail (com a foto de referência) e notificação para a loja; resposta da loja: e-mail para o cliente.
 // Pedidos de demonstração (demo: true) não disparam nada.
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
@@ -34,9 +35,10 @@ const dataBR = (d) => new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, day: '2
 
 // ---------- envio ----------
 let transporte;
-function enviarEmail(para, assunto, html) {
+function enviarEmail(para, assunto, html, anexos) {
   if (!para) return Promise.resolve();
   const msg = { from: `"${LOJA.nome}" <${LOJA.emailLoja}>`, to: para, subject: assunto, html };
+  if (anexos && anexos.length) msg.attachments = anexos;
   if (EMULADOR && process.env.MAIL_LOG) { fs.appendFileSync(process.env.MAIL_LOG, JSON.stringify({ tipo: 'email', ...msg }) + '\n'); return Promise.resolve(); }
   transporte = transporte || nodemailer.createTransport({ service: 'gmail', auth: { user: LOJA.emailLoja, pass: SENHA_GMAIL.value() } });
   return transporte.sendMail(msg).catch((e) => logger.error('Falha ao enviar e-mail', { para, assunto, erro: e.message }));
@@ -181,6 +183,54 @@ exports.pedidoAtualizado = onDocumentUpdated({ document: 'orders/{id}', ...OPCOE
   await Promise.all(tarefas);
 });
 
+// ---------- pedidos personalizados ----------
+const PERSONALIZADO = {
+  orcado: ['Resposta sobre o seu pedido personalizado #{c}', 'Encontramos uma opção para você. Confira abaixo e confirme pelo WhatsApp.'],
+  encomendado: ['Seu pedido personalizado #{c} foi encomendado', 'Já encomendamos o produto. Avisamos quando ele chegar.'],
+  chegou: ['Seu pedido personalizado #{c} chegou', 'O produto chegou na loja. Combine a entrega ou a retirada pelo WhatsApp.'],
+  recusado: ['Sobre o seu pedido personalizado #{c}', 'Infelizmente não conseguimos encontrar esse produto agora.']
+};
+function pedidoHtml(r) {
+  return `<p style="margin:0 0 8px;font-size:14px"><b>${r.qty || 1}×</b> ${esc(r.desc)}</p>` +
+    (r.model ? `<p style="margin:0 0 8px;font-size:14px"><b>Modelo/código:</b> ${esc(r.model)}</p>` : '') +
+    (r.link ? `<p style="margin:0 0 8px;font-size:14px"><b>Link:</b> <a href="${esc(r.link)}" style="color:#7E1F3B">${esc(r.link)}</a></p>` : '') +
+    (r.budget ? `<p style="margin:0 0 8px;font-size:14px"><b>Até quanto quer pagar:</b> ${brl(r.budget)}</p>` : '');
+}
+// A foto vem do site já reduzida, como data URL (data:image/jpeg;base64,...).
+function anexoFoto(r) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(r.photo || '');
+  return m ? [{ filename: `referencia-${r.code}.${m[1].split('/')[1].replace('jpeg', 'jpg')}`, content: Buffer.from(m[2], 'base64'), contentType: m[1], cid: 'foto-ref' }] : [];
+}
+
+exports.personalizadoCriado = onDocumentCreated({ document: 'requests/{id}', ...OPCOES }, async (event) => {
+  const r = event.data && event.data.data();
+  if (!r || r.demo) return;
+  const c = r.customer || {}, foto = anexoFoto(r);
+  await Promise.all([
+    enviarEmail(LOJA.emailLoja, `✨ Pedido personalizado #${r.code} — ${c.name || 'cliente'}`, layout(`Pedido personalizado #${esc(r.code)}`,
+      `<p style="margin:0 0 8px;font-size:14px"><b>${esc(c.name)}</b> · ${esc(c.phone)}${c.email ? ' · ' + esc(c.email) : ''}</p>` + pedidoHtml(r) +
+      (foto.length ? `<p style="margin:8px 0"><img src="cid:foto-ref" alt="Foto de referência" style="max-width:100%;max-height:360px;border-radius:6px;border:1px solid #EADBD5"></p>` : ''),
+      { texto: 'Responder na gestão', url: LOJA.site + 'admin.html#/pedidos' }), foto),
+    enviarEmail(c.email, `Recebemos seu pedido personalizado #${r.code} — ${LOJA.nome}`, layout(`Recebemos seu pedido personalizado #${esc(r.code)}`,
+      `<p style="margin:0 0 10px;font-size:15px">Olá, ${esc(primeiroNome(c.name))}! Vamos procurar o produto e responder com o preço e o prazo.</p>` + pedidoHtml(r),
+      { texto: 'Acompanhar em Meus pedidos', url: LOJA.site + '#/pedidos' })),
+    notificarLoja(`✨ Pedido personalizado #${r.code}`, `${c.name || 'Cliente'}: ${String(r.desc || '').slice(0, 80)}`, '#/pedidos')
+  ]);
+});
+
+exports.personalizadoAtualizado = onDocumentUpdated({ document: 'requests/{id}', ...OPCOES }, async (event) => {
+  const antes = event.data.before.data(), r = event.data.after.data();
+  if (!r || r.demo) return;
+  const mudouStatus = antes.status !== r.status && PERSONALIZADO[r.status];
+  const mudouNota = r.note && r.note !== antes.note;
+  if (!mudouStatus && !mudouNota) return;
+  const [assunto, texto] = PERSONALIZADO[r.status] || ['Resposta sobre o seu pedido personalizado #{c}', 'A loja respondeu o seu pedido.'];
+  await enviarEmail(r.customer && r.customer.email, assunto.replace('{c}', r.code), layout(esc(assunto.replace('{c}', r.code)),
+    `<p style="margin:0 0 10px;font-size:15px">Olá, ${esc(primeiroNome(r.customer && r.customer.name))}! ${esc(texto)}</p>` +
+    (r.note ? `<p style="margin:0 0 10px;padding:10px 12px;background:#FBF6F3;border-radius:6px;font-size:14px"><b>Mensagem da loja:</b> ${esc(r.note)}</p>` : '') + pedidoHtml(r),
+    { texto: 'Responder no WhatsApp', url: 'https://wa.me/' + LOJA.whatsapp + '?text=' + encodeURIComponent('Olá! Sobre o meu pedido personalizado #' + r.code + '.') }));
+});
+
 // ---------- alerta de estoque baixo ----------
 // Avisa só quando o produto cruza o mínimo (ou esgota), para não repetir o aviso a cada venda.
 exports.estoqueAtualizado = onDocumentUpdated({ document: 'products/{id}', ...OPCOES }, async (event) => {
@@ -255,13 +305,15 @@ async function resumo(agora) {
   const cfg = await ajustes();
   if (cfg.resumoDiario === false) return null;
   const db = admin.firestore(), ontem = diaLocal(new Date(agora - DIA));
-  const [abertos, devol, vendasOntem, receber, prods] = await Promise.all([
+  const [abertos, devol, vendasOntem, receber, prods, pers] = await Promise.all([
     db.collection('orders').where('status', 'in', ['novo', 'confirmado', 'pago', 'enviado', 'retirar']).get(),
     db.collection('orders').where('return.status', '==', 'solicitada').get(),
     db.collection('sales').where('date', '==', ontem).get(),
     db.collection('sales').where('status', '==', 'pendente').get(),
-    db.collection('products').get()
+    db.collection('products').get(),
+    db.collection('requests').where('status', '==', 'novo').get()
   ]);
+  const novosPers = pers.docs.map((d) => d.data()).filter((r) => !r.demo);
   const ped = abertos.docs.map((d) => d.data()).filter((o) => !o.demo);
   const grupo = (st) => ped.filter((o) => o.status === st);
   const total = (list) => list.reduce((t, s) => t + (s.items || []).reduce((a, i) => a + i.qty * i.price, 0) - (s.discount || 0), 0);
@@ -277,9 +329,10 @@ async function resumo(agora) {
     lista('Para separar e entregar', grupo('confirmado').concat(grupo('pago')), (o) => pedLinha(o) + (o.status === 'pago' ? ' · <b>pago</b>' : /pix/i.test(o.payment || '') ? ' · aguardando PIX' : '')) +
     lista('Prontos para retirada', grupo('retirar'), pedLinha) +
     lista('Saíram para entrega', grupo('enviado'), pedLinha) +
+    lista('Pedidos personalizados para responder', novosPers, (r) => `#${esc(r.code)} · ${esc((r.customer || {}).name)} · ${esc(String(r.desc || '').slice(0, 60))}`) +
     lista('Devoluções para responder', devs, (o) => `#${esc(o.code)} · ${esc((o.customer || {}).name)} · ${esc(o['return'].reason)}`) +
     lista('Estoque baixo', baixos, (p) => `${esc(p.name)}: <b>${totalStock(p)}</b>`) +
-    (!ped.length && !devs.length ? '<p style="margin:12px 0 0;font-size:14px">Nenhum pedido em aberto. ☕</p>' : '');
+    (!ped.length && !devs.length && !novosPers.length ? '<p style="margin:12px 0 0;font-size:14px">Nenhum pedido em aberto. ☕</p>' : '');
   const html = layout(`Bom dia! Resumo de ${dataBR(new Date(agora))}`, corpo, { texto: 'Abrir a gestão', url: LOJA.site + 'admin.html' });
   await enviarEmail(LOJA.emailLoja, `☀️ Resumo da ${LOJA.nome} — ${dataBR(new Date(agora))}`, html);
   return html;
@@ -287,4 +340,4 @@ async function resumo(agora) {
 exports.resumoDiario = onSchedule({ schedule: '0 8 * * *', timeZone: FUSO, ...OPCOES }, () => resumo(Date.now()));
 
 // Usado só pelos testes.
-if (process.env.JM_TEST) exports._test = { rotina, resumo };
+if (process.env.JM_TEST) exports._test = { rotina, resumo, anexoFoto };
