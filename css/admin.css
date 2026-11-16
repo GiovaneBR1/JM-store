@@ -102,12 +102,12 @@ main:focus { outline: none; }
 
 /* Top bar */
 .bar { position: sticky; top: 0; z-index: 20; background: var(--bar-bg); color: var(--bar-ink); }
-.bar__in { max-width: 1180px; margin: 0 auto; padding: .6rem 1rem; display: flex; align-items: center; gap: 1.5rem; flex-wrap: nowrap; }
+.bar__in { max-width: 1180px; margin: 0 auto; padding: .6rem 1rem; display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; }
 .logo { font: 700 1.5rem/1 var(--serif); color: var(--bar-ink); text-decoration: none; white-space: nowrap; }
 .logo span { font-style: italic; font-weight: 500; color: var(--rosa); }
 .logo small { font: 500 .72rem var(--sans); text-transform: uppercase; letter-spacing: .12em; color: var(--pastel); margin-left: .35rem; }
 .nav { display: flex; gap: .25rem; overflow-x: auto; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
-.nav a { color: var(--bar-ink-2); text-decoration: none; padding: .4rem .8rem; border-radius: var(--r-full); white-space: nowrap; }
+.nav a { color: var(--bar-ink-2); text-decoration: none; padding: .4rem .65rem; border-radius: var(--r-full); white-space: nowrap; }
 .nav a:hover { background: rgba(255,255,255,.1); }
 .nav a[aria-current="page"] { background: var(--bar-on-bg); color: var(--bar-on-ink); font-weight: 500; }
 .bar__shop { margin-left: auto; color: var(--bar-ink-2); font-size: .9rem; white-space: nowrap; }
@@ -378,3 +378,10 @@ td .sub { display: block; font-size: .82rem; color: var(--brown-2); }
 .auto-item small { display: block; color: var(--brown-2); font-size: .82rem; margin-top: .1rem; }
 .auto-item small input { width: 3.2rem; border: 1px solid var(--rosa); background: var(--field); color: inherit; border-radius: 6px; padding: .05rem .3rem; }
 .order__flags { margin: .4rem 0 0; display: flex; gap: .35rem; flex-wrap: wrap; }
+
+/* Pedidos personalizados */
+.req { display: flex; gap: 1rem; align-items: flex-start; margin: .75rem 0; }
+.req p { margin: 0 0 .25rem; }
+.req__photo { flex: none; width: 96px; height: 96px; padding: 0; border: 1px solid var(--pastel); border-radius: 10px; overflow: hidden; background: none; cursor: zoom-in; }
+.req__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.req__full { display: block; max-width: 100%; max-height: 70vh; margin: .5rem auto 0; border-radius: 10px; }

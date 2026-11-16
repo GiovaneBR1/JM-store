@@ -27,6 +27,16 @@
     recusada: ['Devolução recusada', '', 'err'],
     concluida: ['Devolução concluída', 'O produto foi recebido e o reembolso, feito.', 'done']
   };
+  // Pedidos personalizados (o cliente descreve o que procura e a loja busca).
+  var REQ_STATUS = {
+    novo: ['Recebido', 'A loja vai procurar e responder pelo WhatsApp.', 'warn'],
+    orcado: ['Orçamento enviado', 'Confira a resposta da loja e confirme pelo WhatsApp.', 'ok'],
+    encomendado: ['Encomendado', 'O produto foi encomendado. Avisamos quando chegar.', 'ok'],
+    chegou: ['Chegou na loja', 'Combine a entrega ou a retirada pelo WhatsApp.', 'ok'],
+    concluido: ['Finalizado ✓', '', 'done'],
+    recusado: ['Não encontrado', '', 'err']
+  };
+  var REQ_MSG = 'Entre na sua conta para fazer um pedido personalizado. Assim você acompanha a resposta da loja em Meus pedidos.';
   var RETURN_REASONS = ['Produto com defeito', 'Recebi o produto errado', 'Me arrependi da compra', 'Outro motivo'];
   var RETURN_DAYS = 7;
 
@@ -323,7 +333,8 @@
     if (!list.length) {
       grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>Nenhum produto encontrado</h3>' +
         '<p>' + (state.q ? 'Nada com “' + esc(state.q) + '”. Tente outra palavra ou ' : 'Tente ') + 'ver todas as categorias.</p>' +
-        '<button type="button" class="btn btn--main" data-reset>Ver todos os produtos</button></div>';
+        '<div class="btns btns--center"><button type="button" class="btn btn--main" data-reset>Ver todos os produtos</button>' +
+        '<a class="btn btn--ghost" href="#/personalizado">Fazer um pedido personalizado</a></div></div>';
       return;
     }
     grid.innerHTML = list.map(itemHtml).join('');
@@ -381,7 +392,7 @@
         '<li><h3>Informe a entrega</h3><p>Frete pelo bairro ou retirada grátis.</p></li>' +
         '<li><h3>Confirme no WhatsApp</h3><p>O pedido chega pronto na nossa conversa.</p></li>' +
         '<li><h3>Pague e receba</h3><p>PIX ou cartão, com entrega em até 3 dias úteis.</p></li>' +
-      '</ol></div></section>';
+      '</ol></div></section>' + customCta();
     bindCatalog();
   }
 
@@ -690,6 +701,161 @@
     });
   }
 
+  // ---------- pedido personalizado ----------
+  function customCta() {
+    return '<section class="custom-cta" aria-labelledby="cc-title"><div class="wrap custom-cta__in">' +
+      '<div><h2 id="cc-title">Não achou o que procura?</h2>' +
+      '<p>Conte o que você quer, mande o modelo, o código ou uma foto, e a gente procura para você.</p></div>' +
+      '<a class="btn btn--main" href="#/personalizado">Fazer pedido personalizado</a></div></section>';
+  }
+
+  // Reduz a foto de referência (no máximo 1000 px) para caber no banco de dados.
+  function shrinkPhoto(file) {
+    return new Promise(function (resolve, reject) {
+      if (!/^image\//.test(file.type)) { reject(new Error('type')); return; }
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, 1000 / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        var ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        var q = 0.8, data = c.toDataURL('image/jpeg', q);
+        while (data.length > 400000 && q > 0.35) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }
+        resolve(data);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('load')); };
+      img.src = url;
+    });
+  }
+
+  function viewCustom() {
+    document.title = 'Pedido personalizado — JM Store';
+    if (AUTH.enabled && !AUTH.user) {
+      app.innerHTML = '<div class="wrap done"><h1>Pedido personalizado</h1><p>' + REQ_MSG + '</p>' +
+        '<div class="btns" style="margin-top:1.5rem"><button type="button" class="btn btn--main" data-acct="login">Entrar ou criar conta</button>' +
+        '<a class="btn btn--ghost" href="#/">Voltar à loja</a></div></div>';
+      return;
+    }
+    app.innerHTML = '<div class="wrap"><form id="pp" class="custom" novalidate>' +
+      '<h1>Pedido personalizado</h1><p class="checkout__intro">Não achou na loja? Descreva o produto e a gente procura para você. O pedido abre pronto no nosso WhatsApp e a resposta aparece em Meus pedidos.</p>' +
+      '<fieldset class="block"><legend>O que você procura</legend><div class="cols">' +
+        '<div class="wide">' + field('p-desc', 'Descreva o produto', '<textarea id="p-desc" name="desc" maxlength="1000" required placeholder="Ex.: perfume Lattafa Yara 100 ml, rosa"></textarea>') + '</div>' +
+        field('p-model', 'Marca e modelo ou código', '<input id="p-model" name="model" maxlength="200" placeholder="Ex.: Lattafa Yara, ou o código de barras">') +
+        field('p-link', 'Link de referência', '<input id="p-link" name="link" type="url" inputmode="url" maxlength="500" placeholder="https://…">', 'Um site ou post onde aparece o produto.') +
+        '<div class="wide"><div class="field"><span class="field__label" id="p-photo-label">Foto de referência</span>' +
+          '<div class="photo-pick" id="p-photo-box"><label class="btn btn--ghost" for="p-photo">Escolher foto</label>' +
+          '<input id="p-photo" name="photo" type="file" accept="image/*" class="sr-only" aria-labelledby="p-photo-label">' +
+          '<img id="p-photo-prev" alt="Foto de referência escolhida" hidden><button type="button" class="link-btn" id="p-photo-rm" hidden>Tirar foto</button></div>' +
+          '<small class="note">Um print, a foto da embalagem ou do produto.</small></div></div>' +
+        '<p class="wide ref-need" id="p-ref-err" role="alert"></p>' +
+        field('p-qty', 'Quantidade', '<input id="p-qty" name="qty" type="number" min="1" max="99" value="1" inputmode="numeric">') +
+        field('p-budget', 'Até quanto quer pagar? (opcional)', '<input id="p-budget" name="budget" type="number" min="0" step="0.01" inputmode="decimal" placeholder="R$">') +
+      '</div><p class="note" style="margin-top:.75rem">Informe pelo menos um: <b>marca e modelo ou código</b>, <b>link</b> ou <b>foto</b>, para a gente achar o produto certo.</p></fieldset>' +
+      '<fieldset class="block"><legend>Seus dados</legend><div class="cols">' +
+        field('p-name', 'Nome completo', '<input id="p-name" name="fullname" autocomplete="name" required>') +
+        field('p-phone', 'WhatsApp', '<input id="p-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000" required>') +
+      '</div></fieldset>' +
+      '<button class="btn btn--wa btn--block" type="submit">Enviar pedido pelo WhatsApp</button>' +
+      '</form></div>';
+
+    var form = $('#pp'), photo = '';
+    if (AUTH.user && AUTH.user.name) form.fullname.value = AUTH.user.name;
+    var prev = $('#p-photo-prev'), rm = $('#p-photo-rm'), pick = $('label[for=p-photo]');
+    var setPhoto = function (data) {
+      photo = data || '';
+      prev.hidden = rm.hidden = !photo;
+      if (photo) prev.src = photo; else prev.removeAttribute('src');
+      pick.textContent = photo ? 'Trocar foto' : 'Escolher foto';
+      if (photo) $('#p-ref-err').textContent = '';
+    };
+    form.photo.addEventListener('change', function () {
+      var f = form.photo.files[0];
+      if (!f) return;
+      pick.textContent = 'Carregando…';
+      shrinkPhoto(f).then(setPhoto, function () { setPhoto(photo); toast('Não foi possível abrir essa imagem. Tente outra.'); });
+      form.photo.value = '';
+    });
+    rm.addEventListener('click', function () { setPhoto(''); pick.focus(); });
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var errs = [];
+      var check = function (name, ok, msg) {
+        var el = form[name], err = $('#' + el.id + '-err');
+        el.setAttribute('aria-invalid', ok ? 'false' : 'true');
+        if (ok) { el.removeAttribute('aria-describedby'); err.textContent = ''; }
+        else { el.setAttribute('aria-describedby', err.id); err.textContent = msg; errs.push(el); }
+      };
+      var link = form.link.value.trim();
+      if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+      check('desc', form.desc.value.trim().length >= 3, 'Conte qual produto você procura.');
+      check('link', !link || /^https?:\/\/[^\s.]+\.[^\s]+$/i.test(link), 'Esse link não parece certo. Copie o endereço do site.');
+      var hasRef = !!(form.model.value.trim() || link || photo);
+      var refErr = $('#p-ref-err');
+      refErr.textContent = hasRef ? '' : 'Informe a marca e o modelo, o código, um link ou uma foto de referência.';
+      if (!hasRef) errs.push(form.model);
+      check('fullname', form.fullname.value.trim().length >= 3, 'Digite seu nome completo.');
+      check('phone', form.phone.value.replace(/\D/g, '').length >= 10, 'Digite o WhatsApp com DDD.');
+      if (errs.length) { errs[0].focus(); toast('Confira os campos marcados.'); return; }
+
+      var id = 'P-' + Date.now().toString(36).toUpperCase().slice(-6);
+      var qty = Math.max(1, Math.min(99, parseInt(form.qty.value, 10) || 1));
+      var budget = parseFloat(String(form.budget.value).replace(',', '.'));
+      budget = budget > 0 ? round(budget) : null;
+      var data = {
+        code: id, desc: form.desc.value.trim(), model: form.model.value.trim(), link: link, qty: qty, budget: budget,
+        name: form.fullname.value.trim(), phone: form.phone.value.trim()
+      };
+      var msg = [
+        'Olá, ' + C.storeName + '! Quero fazer um pedido personalizado ✨',
+        '',
+        '*Pedido personalizado #' + id + '*',
+        '',
+        '*O que procuro:* ' + data.desc,
+        data.model ? '*Marca/modelo ou código:* ' + data.model : null,
+        data.link ? '*Link de referência:* ' + data.link : null,
+        photo ? '*Foto de referência:* enviada pelo site (mando aqui também)' : null,
+        '*Quantidade:* ' + qty,
+        budget ? '*Até quanto quero pagar:* ' + brl(budget) : null,
+        '',
+        '*Cliente*',
+        'Nome: ' + data.name,
+        'WhatsApp: ' + data.phone,
+        AUTH.user && AUTH.user.email ? 'E-mail: ' + AUTH.user.email : null
+      ].filter(function (x) { return x !== null; }).join('\n');
+      var wa = waLink(msg);
+      window.open(wa, '_blank', 'noopener');
+
+      // Salva na conta do cliente e na gestão (com a foto), mesmo que ele não envie a mensagem.
+      if (AUTH.user) {
+        AUTH.firestore().collection('requests').add({
+          code: id, uid: AUTH.user.uid, status: 'novo', channel: 'site',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          customer: { name: data.name, phone: data.phone, email: AUTH.user.email || '' },
+          desc: data.desc, model: data.model, link: data.link, photo: photo, qty: qty, budget: budget, note: ''
+        }).catch(function () { toast('Não foi possível salvar o pedido na sua conta. Ele segue pelo WhatsApp.'); });
+      }
+      viewCustomDone(id, wa, !!photo);
+    });
+  }
+
+  function viewCustomDone(id, link, hasPhoto) {
+    document.title = 'Pedido personalizado enviado — JM Store';
+    // Muda o endereço para que o link "Pedido personalizado" abra um formulário novo.
+    try { history.replaceState(null, '', '#/personalizado/enviado'); } catch (e) {}
+    app.innerHTML = '<div class="wrap done"><h1>Pedido #' + id + ' enviado</h1>' +
+      '<p>Abrimos o WhatsApp com o seu pedido. Envie a mensagem por lá' + (hasPhoto ? ' e, se puder, mande a foto de referência na mesma conversa' : '') +
+      '. A gente procura o produto e responde com o preço e o prazo.</p>' +
+      '<div class="btns" style="margin-top:1.5rem"><a class="btn btn--wa" href="' + link + '" target="_blank" rel="noopener">Abrir o WhatsApp de novo</a>' +
+      (AUTH.user ? '<a class="btn btn--ghost" href="#/pedidos">Acompanhar em Meus pedidos</a>' : '') +
+      '<a class="btn btn--ghost" href="#/">Voltar à loja</a></div></div>';
+    app.focus();
+    window.scrollTo(0, 0);
+  }
+
   // ---------- meus pedidos ----------
   function orderDate(o) {
     var d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : new Date();
@@ -707,7 +873,10 @@
         '<div class="btns" style="margin-top:1.5rem"><button type="button" class="btn btn--main" data-acct="login">Entrar</button></div></div>';
       return;
     }
-    app.innerHTML = '<div class="wrap orders"><h1>Meus pedidos</h1><div id="orders-list"><p class="note">Carregando…</p></div></div>';
+    app.innerHTML = '<div class="wrap orders"><h1>Meus pedidos</h1><div id="req-list"></div><div id="orders-list"><p class="note">Carregando…</p></div></div>';
+    var stopReq = AUTH.firestore().collection('requests').where('uid', '==', AUTH.user.uid).onSnapshot(function (snap) {
+      drawRequests(snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return orderTime(b) - orderTime(a); }));
+    }, function () {});
     // Ao vivo: quando a loja muda o status, a tela atualiza sozinha.
     var pending = null;
     stopOrders = AUTH.firestore().collection('orders').where('uid', '==', AUTH.user.uid).onSnapshot(function (snap) {
@@ -719,6 +888,9 @@
       var box = $('#orders-list');
       if (box) box.innerHTML = '<p class="note">Não foi possível carregar seus pedidos agora. Recarregue a página.</p>';
     });
+
+    var stopList = stopOrders;
+    stopOrders = function () { stopList(); stopReq(); };
 
     var box = $('#orders-list');
     box.addEventListener('toggle', function (e) {
@@ -760,6 +932,24 @@
       '<button class="btn btn--main" type="submit">Enviar pedido de devolução</button></form></details>';
   }
 
+  function drawRequests(list) {
+    var box = $('#req-list');
+    if (!box) return;
+    box.innerHTML = list.length ? '<h2 class="orders__sub">Pedidos personalizados</h2>' + list.map(function (r) {
+      var st = REQ_STATUS[r.status] || [r.status, '', 'warn'];
+      return '<article class="order order--req"><header><div><h2>Pedido personalizado #' + esc(r.code) + '</h2><small>' + orderDate(r) + '</small></div>' +
+        '<span class="order__status order__status--' + st[2] + '">' + esc(st[0]) + '</span></header>' +
+        '<div class="req">' + (r.photo ? '<img class="req__photo" src="' + r.photo + '" alt="Foto de referência">' : '') +
+          '<div><p>' + r.qty + 'x ' + esc(r.desc) + '</p>' +
+          (r.model ? '<p class="note">Modelo/código: ' + esc(r.model) + '</p>' : '') +
+          (r.link ? '<p class="note"><a href="' + esc(r.link) + '" target="_blank" rel="noopener nofollow">Link de referência</a></p>' : '') +
+          (r.budget ? '<p class="note">Até ' + brl(r.budget) + '</p>' : '') + '</div></div>' +
+        (r.note || st[1] ? '<div class="ret-box ret-box--' + st[2] + '">' + (r.note ? '<b>Resposta da loja</b><span>' + esc(r.note) + '</span>' : '<span>' + st[1] + '</span>') + '</div>' : '') +
+        '<p class="order__help"><a href="' + waLink('Olá! Quero falar sobre o meu pedido personalizado #' + r.code + '.') + '" target="_blank" rel="noopener">Falar sobre este pedido</a></p>' +
+        '</article>';
+    }).join('') + '<h2 class="orders__sub">Compras</h2>' : '';
+  }
+
   function drawOrders(list) {
     var box = $('#orders-list');
     if (!box) return;
@@ -794,6 +984,7 @@
     else if (parts[0] === 'produto') viewProduct(decodeURIComponent(parts[1] || ''));
     else if (parts[0] === 'categoria') viewCategory(parts[1]);
     else if (parts[0] === 'checkout') viewCheckout();
+    else if (parts[0] === 'personalizado') viewCustom();
     else viewHome();
     if (!first) { window.scrollTo(0, 0); app.focus({ preventScroll: true }); }
     first = false;
@@ -876,6 +1067,6 @@
     // Ao sair da conta, a sacola é esvaziada (útil em aparelho compartilhado).
     if (wasLogged && !s.user) { cart = []; save(); }
     wasLogged = !!s.user;
-    if (started && (location.hash === '#/checkout' || location.hash === '#/pedidos')) route();
+    if (started && (location.hash === '#/checkout' || location.hash === '#/pedidos' || location.hash === '#/personalizado')) route();
   });
 })();

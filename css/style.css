@@ -419,3 +419,26 @@ svg [fill="#E8C9A0"] { fill: var(--t-sand); }
 .theme-btn { flex: none; width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border: 1.5px solid var(--line-2); border-radius: var(--r-full); background: transparent; color: var(--ink); cursor: pointer; }
 .theme-btn:hover { background: var(--soft); }
 .theme-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+/* Pedido personalizado */
+.custom-cta { padding: 3.5rem 0; }
+.custom-cta__in { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem 2.5rem; flex-wrap: wrap; border: 1.5px solid var(--line-2); border-radius: var(--r-lg); padding: 2rem 2.25rem; background: var(--surface); }
+.custom-cta h2 { font-size: clamp(1.8rem, 3.5vw, 2.4rem); }
+.custom-cta p { margin-top: .4rem; color: var(--ink-2); max-width: 46ch; }
+.btns--center { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
+.custom { max-width: 720px; padding: 2rem 0 5rem; }
+.custom h1 { font-size: clamp(2.2rem, 4.5vw, 3.2rem); margin-bottom: .5rem; }
+.field__label { font-weight: 500; font-size: .95rem; }
+.photo-pick { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem 1rem; }
+.photo-pick label.btn { cursor: pointer; }
+.photo-pick:focus-within label.btn { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.photo-pick img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ref-need { margin: 0; color: var(--err); font-size: .9rem; }
+.ref-need:empty { display: none; }
+.orders__sub { font-size: 1.5rem; margin: 1.75rem 0 .85rem; }
+.orders__sub:first-child { margin-top: 0; }
+.req { display: flex; gap: 1rem; margin-top: .85rem; font-size: .95rem; }
+.req__photo { width: 84px; height: 84px; flex: none; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); }
+.req p + p { margin-top: .2rem; }
+@media (max-width: 760px) { .custom-cta__in { padding: 1.5rem 1.25rem; } .custom-cta .btn { width: 100%; justify-content: center; } }

@@ -81,6 +81,11 @@ Todas rodam no servidor que já está ativo (Firebase, plano Blaze), agendadas p
 
 Tudo fica em **Pedidos → Automações**. O estoque passa a ser reservado quando o pedido é confirmado (à mão ou sozinho) e volta se o pedido for cancelado.
 
+### Pedido personalizado (feito)
+- [x] "Não achou o que procura?" na página inicial, na busca sem resultado e no rodapé → formulário com descrição, marca e modelo ou código, link, foto, quantidade e quanto quer pagar. Obrigatório: descrição e pelo menos um entre modelo/código, link ou foto.
+- [x] Precisa de login (como na compra). Abre pronto no WhatsApp e salva na conta, com a foto reduzida no próprio banco (sem custo extra).
+- [x] Gestão: filtro "Personalizados" em Pedidos, resposta com preço e prazo, status e WhatsApp do cliente. Cliente acompanha em Meus pedidos. E-mail com a foto e notificação para a loja; e-mail para o cliente a cada resposta. Entra no resumo das 8h.
+
 ### Fase 2 — vender mais
 6. [ ] **"Avise-me quando chegar":** cliente deixa o e-mail no produto esgotado; ao dar entrada no estoque, recebe o aviso.
 7. [ ] **Autorização de novidades (LGPD) + boas-vindas:** caixinha "Quero receber novidades e ofertas" no cadastro/checkout, link para parar de receber, e e-mail de boas-vindas com cupom de primeira compra.
