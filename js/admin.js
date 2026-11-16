@@ -47,7 +47,7 @@
   function today() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
   function fmtDate(iso) { var p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
   function cats() {
-    var list = db && db.categories && db.categories.length ? db.categories : DEFAULT_CATS;
+    var list = db && db.categories ? db.categories : DEFAULT_CATS;
     return list.slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name); });
   }
   function catName(slug) { var c = cats().find(function (c) { return c.id === slug; }); return c ? c.name : slug ? slug : 'Sem categoria'; }
@@ -133,8 +133,9 @@
   // Garante categorias (incluindo as que os produtos já usam) e as configurações da loja.
   function ensureBasics() {
     if (!db.categories) db.categories = [];
-    var launched = db.settings && db.settings[0] && db.settings[0].launched;
-    if (!db.categories.length && !launched) db.categories = DEFAULT_CATS.map(function (c) { return Object.assign({}, c); });
+    // As categorias padrão só entram na primeira vez (loja sem configurações); depois, apagar todas vale.
+    var fresh = !db.settings || !db.settings.length;
+    if (!db.categories.length && fresh) db.categories = DEFAULT_CATS.map(function (c) { return Object.assign({}, c); });
     db.products.forEach(function (p) {
       if (p.category && !db.categories.some(function (c) { return c.id === p.category; })) {
         db.categories.push({ id: p.category, name: p.category.charAt(0).toUpperCase() + p.category.slice(1), order: db.categories.length, featured: false });
@@ -338,13 +339,14 @@
 
   function salesTable(list, compact) {
     if (!list.length) return '<p class="empty">Nenhuma venda registrada.</p>';
-    return '<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th>' +
+    var ids = list.map(function (s) { return s.id; });
+    return (compact ? '' : bulkBar('sales', ids)) + '<div class="table-wrap"><table><thead><tr>' + (compact ? '' : '<th class="sel-col">' + selAll('sales', ids) + '</th>') + '<th>Data</th><th>Cliente</th>' +
       (compact ? '' : '<th>Itens</th><th>Pagamento</th>') + '<th>Status</th><th class="num">Total</th>' +
       (compact ? '' : '<th></th>') + '</tr></thead><tbody>' +
       list.map(function (s) {
         var c = customer(s.customerId);
         var items = s.items.map(function (i) { return i.qty + '× ' + esc(itemLabel(i)); }).join('<br>');
-        return '<tr><td>' + fmtDate(s.date) + '</td><td>' + (c ? esc(c.name) : '<span class="muted">Balcão</span>') + '</td>' +
+        return '<tr' + (sel.sales[s.id] && !compact ? ' class="is-sel"' : '') + '>' + (compact ? '' : '<td class="sel-col">' + selBox('sales', s.id) + '</td>') + '<td>' + fmtDate(s.date) + '</td><td>' + (c ? esc(c.name) : '<span class="muted">Balcão</span>') + '</td>' +
           (compact ? '' : '<td>' + items + '</td><td>' + esc(s.payment) + '</td>') +
           '<td>' + statusPill(s) + '</td><td class="num"><b>' + brl(saleTotal(s)) + '</b></td>' +
           (compact ? '' : '<td class="row-actions">' +
@@ -394,7 +396,8 @@
         '<select data-filter="produtos.sit" aria-label="Situação">' + opt('', 'Todas as situações', f.sit) + opt('parados', 'Só parados (' + stoppedN + ')', f.sit) + opt('esgotados', 'Só esgotados', f.sit) + '</select>' +
         '<span class="count">' + list.length + ' produto(s)</span>' +
       '</div>' +
-      (list.length ? '<div class="table-wrap"><table><thead><tr><th></th><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th>' +
+      bulkBar('products', list.map(function (p) { return p.id; })) +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th class="sel-col">' + selAll('products', list.map(function (p) { return p.id; })) + '</th><th></th><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th>' +
         '<th class="num">Margem</th><th class="num">Estoque</th><th>Situação</th><th></th></tr></thead><tbody>' +
         list.map(function (p) {
           var opts = SHOP.hasOptions(p), price = opts ? SHOP.minPrice(p) : sellPrice(p), st = sit[p.id];
@@ -402,7 +405,7 @@
           var situation = totalStock(p) <= 0 ? '<span class="muted">Sem estoque</span>'
             : st.stopped ? '<span class="pill pill--warn" title="' + (st.never ? 'Nunca vendeu desde o cadastro' : 'Última venda em ' + fmtDate(st.last)) + '">Parado há ' + st.days + ' dias</span>'
             : '<span class="pill pill--neutral">' + (st.last ? 'Vendeu em ' + fmtDate(st.last).slice(0, 5) : 'Novo') + '</span>';
-          return '<tr><td class="thumb">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span aria-hidden="true">📷</span>') + '</td>' +
+          return '<tr' + (sel.products[p.id] ? ' class="is-sel"' : '') + '><td class="sel-col">' + selBox('products', p.id) + '</td><td class="thumb">' + (p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span aria-hidden="true">📷</span>') + '</td>' +
             '<td>' + esc(p.name) + (p.featured ? ' <span class="pill pill--neutral">Destaque</span>' : '') +
               '<span class="sub">' + esc(catName(p.category)) + (SHOP.contentLabel(p) ? ' · ' + esc(SHOP.contentLabel(p)) : '') + (opts ? ' · ' + p.variants.length + ' opções: ' + esc(p.variants.map(function (o) { return o.name + ' (' + (o.stock || 0) + ')'; }).join(', ')) : '') + '</span></td>' +
             '<td class="num">' + (p.cost ? brl(p.cost) : '<span class="muted">—</span>') + '</td>' +
@@ -425,7 +428,8 @@
       '<div class="actions"><button class="btn" data-action="new-customer">+ Novo cliente</button></div></div>' +
       '<div class="toolbar"><input type="search" placeholder="Buscar por nome, telefone ou bairro…" data-filter="clientes.q" value="' + esc(filters.clientes.q) + '" aria-label="Buscar cliente">' +
       '<span class="count">' + list.length + ' cliente(s)</span></div>' +
-      (list.length ? '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>WhatsApp</th><th>Bairro</th>' +
+      bulkBar('customers', list.map(function (c) { return c.id; })) +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th class="sel-col">' + selAll('customers', list.map(function (c) { return c.id; })) + '</th><th>Nome</th><th>WhatsApp</th><th>Bairro</th>' +
         '<th class="num">Compras</th><th class="num">Total gasto</th><th>Última compra</th><th></th></tr></thead><tbody>' +
         list.map(function (c) {
           var sales = db.sales.filter(function (s) { return s.customerId === c.id; });
@@ -433,7 +437,7 @@
           var owes = sales.filter(function (s) { return s.status === 'pendente'; }).reduce(function (t, s) { return t + saleTotal(s); }, 0);
           var last = sales.map(function (s) { return s.date; }).sort().pop();
           var phone = digits(c.phone);
-          return '<tr><td>' + esc(c.name) + (c.notes ? '<span class="sub">' + esc(c.notes) + '</span>' : '') + '</td>' +
+          return '<tr' + (sel.customers[c.id] ? ' class="is-sel"' : '') + '><td class="sel-col">' + selBox('customers', c.id) + '</td><td>' + esc(c.name) + (c.notes ? '<span class="sub">' + esc(c.notes) + '</span>' : '') + '</td>' +
             '<td>' + (phone ? '<a href="https://wa.me/' + (phone.length <= 11 ? '55' : '') + phone + '" target="_blank" rel="noopener">' + esc(c.phone) + '</a>' : '—') + '</td>' +
             '<td>' + esc(c.neighborhood || '—') + '</td><td class="num">' + sales.length + '</td>' +
             '<td class="num">' + brl(spent) + (owes ? '<span class="sub" style="color:var(--warn)">deve ' + brl(owes) + '</span>' : '') + '</td>' +
@@ -480,20 +484,20 @@
   filters.pedidos = { status: 'abertos' };
   function viewPedidos() {
     var f = filters.pedidos;
-    if (f.status === 'personalizados') return pedidosHead(f, (db.requests || []).length, 'pedido(s) personalizado(s)') + requestsHtml();
+    if (f.status === 'personalizados') return pedidosHead(f, 'requests', (db.requests || []).map(function (r) { return r.id; }), 'pedido(s) personalizado(s)') + requestsHtml();
     var list = (db.orders || []).filter(function (o) {
       var r = o['return'];
       if (f.status === 'abertos') return (o.status !== 'entregue' && o.status !== 'cancelado') || (r && (r.status === 'solicitada' || r.status === 'aprovada'));
       if (f.status === 'devolucoes') return !!r;
       return !f.status || o.status === f.status;
     }).sort(function (a, b) { return orderMillis(b) - orderMillis(a); });
-    return pedidosHead(f, list.length, 'pedido(s)') +
+    return pedidosHead(f, 'orders', list.map(function (o) { return o.id; }), 'pedido(s)') +
       (list.length ? '<div class="orders">' + list.map(function (o) {
         var st = ORDER_STATUS.find(function (s) { return s[0] === o.status; }) || ORDER_STATUS[0];
         var first = (o.customer.name || '').split(' ')[0];
         var wa = waTo(o.customer.phone, 'Olá, ' + first + '! Aqui é da JM Store. Seu pedido #' + o.code + ' está: ' + (CLIENT_LABEL[o.status] || o.status) + '.');
-        return '<article class="panel order' + (o.status === 'novo' ? ' order--new' : '') + '">' +
-          '<header><div><h2>#' + esc(o.code) + ' <span class="pill pill--' + st[2] + '">' + st[1] + '</span></h2>' +
+        return '<article class="panel order' + (o.status === 'novo' ? ' order--new' : '') + (sel.orders[o.id] ? ' is-sel' : '') + '">' +
+          '<header><div><h2>' + selBox('orders', o.id) + ' #' + esc(o.code) + ' <span class="pill pill--' + st[2] + '">' + st[1] + '</span></h2>' +
             '<p class="muted">' + orderWhen(o) + ' · <b>' + esc(o.customer.name) + '</b>' +
             (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(o.customer.phone) + '</a>' : '') + '</p></div>' +
             '<b class="order__total">' + brl(o.total) + '</b></header>' +
@@ -513,7 +517,7 @@
       }).join('') + '</div>' : '<p class="empty">Nenhum pedido aqui.</p>');
   }
 
-  function pedidosHead(f, count, noun) {
+  function pedidosHead(f, kind, ids, noun) {
     var nr = newRequests().length;
     return '<div class="head"><div><h1>Pedidos do site</h1><p class="muted">Pedidos feitos pela loja. Mude o status e o cliente acompanha em "Meus pedidos".</p></div></div>' +
       (!cloud ? '<p class="notice">Os pedidos do site só aparecem com o login ativado.</p>' : '<div class="push-card" id="push-card"><b>Avisos de pedido neste aparelho</b><span class="muted">Verificando…</span></div>' + autoPanel()) +
@@ -522,7 +526,8 @@
         opt('abertos', 'Em aberto', f.status) + opt('', 'Todos', f.status) + opt('devolucoes', 'Devoluções', f.status) +
         opt('personalizados', 'Personalizados' + (nr ? ' (' + nr + ' novo' + (nr > 1 ? 's' : '') + ')' : ''), f.status) +
         ORDER_STATUS.map(function (s) { return opt(s[0], s[1], f.status); }).join('') + '</select>' +
-        '<span class="count">' + count + ' ' + noun + '</span></div>';
+        (ids.length ? '<label class="check sel-all">' + selAll(kind, ids) + ' Selecionar todos</label>' : '') +
+        '<span class="count">' + ids.length + ' ' + noun + '</span></div>' + bulkBar(kind, ids);
   }
 
   function requestsHtml() {
@@ -534,8 +539,8 @@
       var st = REQ_STATUS.find(function (s) { return s[0] === r.status; }) || REQ_STATUS[0];
       var first = (r.customer.name || '').split(' ')[0];
       var wa = waTo(r.customer.phone, 'Olá, ' + first + '! Aqui é da JM Store, sobre o seu pedido personalizado #' + r.code + ' (' + r.desc.slice(0, 80) + ').' + (r.note ? ' ' + r.note : ''));
-      return '<article class="panel order' + (r.status === 'novo' ? ' order--new' : '') + '">' +
-        '<header><div><h2>✨ #' + esc(r.code) + ' <span class="pill pill--' + st[2] + '">' + st[1] + '</span></h2>' +
+      return '<article class="panel order' + (r.status === 'novo' ? ' order--new' : '') + (sel.requests[r.id] ? ' is-sel' : '') + '">' +
+        '<header><div><h2>' + selBox('requests', r.id) + ' ✨ #' + esc(r.code) + ' <span class="pill pill--' + st[2] + '">' + st[1] + '</span></h2>' +
           '<p class="muted">' + orderWhen(r) + ' · <b>' + esc(r.customer.name) + '</b>' +
           (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(r.customer.phone) + '</a>' : '') + '</p></div>' +
           (r.budget ? '<b class="order__total">até ' + brl(r.budget) + '</b>' : '') + '</header>' +
@@ -628,10 +633,11 @@
     return '' +
       '<div class="head"><div><h1>Categorias</h1><p class="muted">Viram os filtros da loja. Marque até 3 para aparecer na vitrine da página inicial.</p></div>' +
       '<div class="actions"><button class="btn" data-action="new-category">+ Nova categoria</button></div></div>' +
-      (list.length ? '<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Categoria</th><th class="num">Produtos</th><th>Na vitrine</th><th></th></tr></thead><tbody>' +
+      bulkBar('categories', list.map(function (c) { return c.id; })) +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th class="sel-col">' + selAll('categories', list.map(function (c) { return c.id; })) + '</th><th>Ordem</th><th>Categoria</th><th class="num">Produtos</th><th>Na vitrine</th><th></th></tr></thead><tbody>' +
         list.map(function (c, i) {
           var n = db.products.filter(function (p) { return p.category === c.id; }).length;
-          return '<tr><td class="row-actions" style="text-align:left">' +
+          return '<tr' + (sel.categories[c.id] ? ' class="is-sel"' : '') + '><td class="sel-col">' + selBox('categories', c.id) + '</td><td class="row-actions" style="text-align:left">' +
               '<button class="link" data-action="cat-up" data-id="' + esc(c.id) + '" aria-label="Subir"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
               '<button class="link" data-action="cat-down" data-id="' + esc(c.id) + '" aria-label="Descer"' + (i === list.length - 1 ? ' disabled' : '') + '>↓</button></td>' +
             '<td><b>' + esc(c.name) + '</b></td><td class="num">' + n + '</td>' +
@@ -649,9 +655,10 @@
       '<div class="head"><div><h1>Cupons de desconto</h1><p class="muted">O cliente digita o código ao finalizar o pedido na loja.</p></div>' +
       '<div class="actions"><button class="btn" data-action="new-coupon">+ Novo cupom</button></div></div>' +
       (!cloud ? '<p class="notice">Os cupons só funcionam na loja com o login ativado.</p>' : '') +
-      (list.length ? '<div class="table-wrap"><table><thead><tr><th>Código</th><th class="num">Desconto</th><th class="num">Pedido mínimo</th><th>Status</th><th></th></tr></thead><tbody>' +
+      bulkBar('coupons', list.map(function (c) { return c.id; })) +
+      (list.length ? '<div class="table-wrap"><table><thead><tr><th class="sel-col">' + selAll('coupons', list.map(function (c) { return c.id; })) + '</th><th>Código</th><th class="num">Desconto</th><th class="num">Pedido mínimo</th><th>Status</th><th></th></tr></thead><tbody>' +
         list.map(function (c) {
-          return '<tr><td><b>' + esc(c.code) + '</b></td><td class="num">' + couponLabel(c) + '</td>' +
+          return '<tr' + (sel.coupons[c.id] ? ' class="is-sel"' : '') + '><td class="sel-col">' + selBox('coupons', c.id) + '</td><td><b>' + esc(c.code) + '</b></td><td class="num">' + couponLabel(c) + '</td>' +
             '<td class="num">' + (c.minOrder ? brl(c.minOrder) : '<span class="muted">—</span>') + '</td>' +
             '<td>' + (c.active ? '<span class="pill pill--ok">Ativo</span>' : '<span class="pill pill--neutral">Pausado</span>') + '</td>' +
             '<td class="row-actions"><button class="link" data-action="toggle-coupon" data-id="' + esc(c.id) + '">' + (c.active ? 'Pausar' : 'Ativar') + '</button>' +
@@ -681,6 +688,59 @@
           '<button class="btn btn--danger" data-action="launch">Preparar para o lançamento</button></section>' +
       '</div>';
   }
+
+  // ---------- seleção em massa ----------
+  // Marque várias linhas (ou cartões) e exclua de uma vez. A seleção fica guardada por tela.
+  var sel = { products: {}, categories: {}, customers: {}, sales: {}, coupons: {}, orders: {}, requests: {} };
+  var SEL_NOUN = { products: 'produto(s)', categories: 'categoria(s)', customers: 'cliente(s)', sales: 'venda(s)', coupons: 'cupom(ns)', orders: 'pedido(s)', requests: 'pedido(s) personalizado(s)' };
+  function selIds(kind, ids) {
+    // Esquece itens que não existem mais (excluídos aqui ou em outro aparelho).
+    var keep = {};
+    (db[kind] || []).forEach(function (x) { if (sel[kind][x.id]) keep[x.id] = true; });
+    sel[kind] = keep;
+    return ids.filter(function (id) { return keep[id]; });
+  }
+  function selBox(kind, id) {
+    return '<input type="checkbox" class="sel" data-sel="' + kind + '" value="' + esc(id) + '"' + (sel[kind][id] ? ' checked' : '') + ' aria-label="Selecionar">';
+  }
+  function selAll(kind, ids, label) {
+    var n = ids.filter(function (id) { return sel[kind][id]; }).length;
+    return '<input type="checkbox" class="sel" data-sel-all="' + kind + '" data-ids="' + esc(JSON.stringify(ids)) + '"' +
+      (ids.length && n === ids.length ? ' checked' : '') + (n && n < ids.length ? ' data-mixed' : '') + (ids.length ? '' : ' disabled') + ' aria-label="' + (label || 'Selecionar todos') + '">';
+  }
+  function bulkBar(kind, visible) {
+    var n = selIds(kind, visible).length, all = Object.keys(sel[kind]).length;
+    if (!all) return '';
+    return '<div class="bulk" role="region" aria-label="Itens selecionados"><b>' + all + ' ' + SEL_NOUN[kind] + ' selecionado(s)</b>' +
+      (all > n ? '<span class="muted">(' + (all - n) + ' fora do filtro atual)</span>' : '') +
+      '<button class="btn btn--sm btn--danger" data-action="bulk-delete" data-id="' + kind + '">Excluir selecionados</button>' +
+      '<button class="link" data-action="bulk-clear" data-id="' + kind + '">Limpar seleção</button></div>';
+  }
+  // Exclui em massa com as mesmas regras da exclusão de um item só.
+  var BULK = {
+    products: { warn: 'As vendas antigas continuam no histórico.', run: function (ids) {
+      db.products = db.products.filter(function (p) { return !ids[p.id]; }); return {}; } },
+    categories: { warn: 'Categorias com produtos não são excluídas.', run: function (ids) {
+      var busy = db.categories.filter(function (c) { return ids[c.id] && db.products.some(function (p) { return p.category === c.id; }); });
+      db.categories = db.categories.filter(function (c) { return !ids[c.id] || busy.indexOf(c) !== -1; });
+      return { skipped: busy.length, why: busy.map(function (c) { return c.name; }).join(', ') + ' (têm produtos)' }; } },
+    customers: { warn: 'As vendas deles ficam como "Balcão".', run: function (ids) {
+      db.customers = db.customers.filter(function (c) { return !ids[c.id]; });
+      db.sales.forEach(function (s) { if (ids[s.customerId]) s.customerId = ''; }); return {}; } },
+    sales: { warn: 'Os produtos dessas vendas voltam para o estoque.', run: function (ids) {
+      db.sales.filter(function (s) { return ids[s.id]; }).forEach(function (s) {
+        s.items.forEach(function (i) { adjustStock(i.productId, i.variant, i.qty); });
+        var o = orderOfSale(s.id); if (o) { delete o.saleId; o.reserved = false; }
+      });
+      db.sales = db.sales.filter(function (s) { return !ids[s.id]; }); return {}; } },
+    coupons: { warn: 'Os códigos param de funcionar na loja.', run: function (ids) {
+      db.coupons = db.coupons.filter(function (c) { return !ids[c.id]; }); return {}; } },
+    orders: { warn: 'Os clientes deixam de ver esses pedidos. Estoque reservado volta; vendas já lançadas continuam em Vendas.', run: function (ids) {
+      db.orders.filter(function (o) { return ids[o.id]; }).forEach(releaseOrder);
+      db.orders = db.orders.filter(function (o) { return !ids[o.id]; }); return {}; } },
+    requests: { warn: 'Os clientes deixam de ver esses pedidos em Meus pedidos.', run: function (ids) {
+      db.requests = db.requests.filter(function (r) { return !ids[r.id]; }); return {}; } }
+  };
 
   function opt(value, label, current) {
     return '<option value="' + esc(value) + '"' + (value === current ? ' selected' : '') + '>' + esc(label) + '</option>';
@@ -721,6 +781,7 @@
     var r = ROUTES[route()] || ROUTES[''];
     app.innerHTML = (cloud ? '' : '<p class="notice">Login desligado: qualquer pessoa com o link abre esta página e os dados ficam só neste navegador. Veja no README como ativar o login.</p>') + r[1]();
     if (r[2]) r[2]();
+    $$('[data-mixed]').forEach(function (el) { el.indeterminate = true; });
     var badge = $('#orders-badge'), n = newOrders().length + newRequests().length;
     if (badge) { badge.textContent = n; badge.hidden = !n; }
     $$('[data-nav]').forEach(function (a) {
@@ -1270,6 +1331,15 @@
     },
     'new-customer': function () { customerForm(null); },
     'new-coupon': function () { couponForm(null); },
+    'bulk-clear': function (kind) { sel[kind] = {}; render(); },
+    'bulk-delete': function (kind) {
+      var ids = sel[kind], n = Object.keys(ids).length;
+      if (!n || !confirm('Excluir ' + n + ' ' + SEL_NOUN[kind] + '? ' + BULK[kind].warn + '\nIsso não pode ser desfeito.')) return;
+      var before = (db[kind] || []).length, r = BULK[kind].run(ids), done = before - (db[kind] || []).length;
+      sel[kind] = {};
+      save(); render();
+      toast(done + ' ' + SEL_NOUN[kind] + ' excluído(s).' + (r.skipped ? ' Não excluídas: ' + r.why + '.' : ''));
+    },
     'req-photo': function (id) {
       var r = db.requests.find(function (x) { return x.id === id; });
       openModal('<h2>Foto de referência #' + esc(r.code) + '</h2><img class="req__full" src="' + r.photo + '" alt="Foto de referência enviada pelo cliente">' +
@@ -1379,6 +1449,12 @@
   });
 
   app.addEventListener('change', function (e) {
+    var sk = e.target.dataset.sel, sa = e.target.dataset.selAll;
+    if (sk) { if (e.target.checked) sel[sk][e.target.value] = true; else delete sel[sk][e.target.value]; render(); return; }
+    if (sa) {
+      JSON.parse(e.target.dataset.ids).forEach(function (id) { if (e.target.checked) sel[sa][id] = true; else delete sel[sa][id]; });
+      render(); return;
+    }
     var ak = e.target.dataset.auto;
     if (ak) {
       var st = settings(), label = '';

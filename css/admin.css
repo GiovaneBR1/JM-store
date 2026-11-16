@@ -385,3 +385,18 @@ td .sub { display: block; font-size: .82rem; color: var(--brown-2); }
 .req__photo { flex: none; width: 96px; height: 96px; padding: 0; border: 1px solid var(--pastel); border-radius: 10px; overflow: hidden; background: none; cursor: zoom-in; }
 .req__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .req__full { display: block; max-width: 100%; max-height: 70vh; margin: .5rem auto 0; border-radius: 10px; }
+
+/* Seleção em massa */
+input.sel { width: 1.1rem; height: 1.1rem; margin: 0; vertical-align: middle; accent-color: var(--malva-ink); cursor: pointer; }
+th.sel-col, td.sel-col { width: 2.2rem; padding-right: 0; }
+tr.is-sel td { background: var(--pastel-soft); }
+.order.is-sel { border-color: var(--malva-ink); }
+.order h2 input.sel { margin-right: .35rem; position: relative; top: -2px; }
+.sel-all { white-space: nowrap; }
+.bulk { position: sticky; top: 4.6rem; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin: 0 0 1rem; padding: .6rem 1rem; border-radius: var(--r-lg); background: var(--card); border: 1.5px solid var(--malva-ink); box-shadow: 0 4px 14px rgba(30, 12, 20, .12); }
+.bulk .btn--danger { margin-left: auto; }
+@media (max-width: 760px) {
+  .bulk { position: fixed; top: auto; left: 16px; right: 16px; bottom: max(12px, env(safe-area-inset-bottom, 0px)); margin: 0; }
+  body:has(.bulk) #app { padding-bottom: 6.5rem; }
+  body:has(.bulk) .toast { bottom: 7.5rem; }
+}

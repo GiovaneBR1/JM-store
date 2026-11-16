@@ -84,6 +84,7 @@ Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o me
 - **Categorias:** crie, renomeie, ordene e exclua (só sem produtos). Elas viram os filtros da loja. Marque até 3 para a vitrine da página inicial.
 - **Cupons:** crie códigos de desconto em porcentagem ou valor fixo, com pedido mínimo opcional. Dá para pausar e reativar.
 - **Clientes:** contato com link para o WhatsApp, total gasto e quanto cada um deve.
+- **Excluir vários de uma vez:** em Produtos, Categorias, Clientes, Vendas, Cupons e Pedidos (inclusive os personalizados), marque as caixinhas (ou "selecionar todos") e use **Excluir selecionados**. Vale a mesma regra da exclusão de um item só: venda excluída devolve o estoque, cliente excluído deixa as vendas como "Balcão", categoria com produtos não é apagada e pedido com estoque reservado devolve a reserva.
 - **Backup:** com o login ativo, os dados ficam na nuvem e aparecem em qualquer aparelho do admin, atualizando ao vivo. Mesmo assim, baixe um backup de vez em quando.
 - **Treino e lançamento** (aba Backup): **Carregar demonstração** preenche clientes, vendas, pedidos e um cupom fictícios para conhecer a gestão (o estoque não muda); **Tirar demonstração** apaga só esses dados. **Preparar para o lançamento** apaga produtos, vendas, pedidos e clientes de teste (você escolhe) para começar as vendas de verdade; depois disso a loja nunca mais mostra os produtos de exemplo.
 

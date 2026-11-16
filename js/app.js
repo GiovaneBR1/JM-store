@@ -4,7 +4,7 @@
   var C = window.JM_CONFIG;
   var P = window.JM_PRODUCTS; // trocado pelo catálogo da nuvem (gestão) quando disponível
   var SHOP = window.JMShop;
-  // Categorias da loja: vêm da gestão (nuvem); sem login configurado, usa as do js/products.js.
+  // Categorias da loja: vêm da gestão (nuvem, mesmo que a dona tenha apagado todas); sem login configurado, usa as do js/products.js.
   var CATS = (window.JM_CATEGORIES || []).map(function (c, i) { return { id: c.slug, name: c.name, order: i, featured: i < 3 }; });
   P = (P || []).map(function (p) { return SHOP.normalize(JSON.parse(JSON.stringify(p))); });
   var app = document.getElementById('app');
@@ -1052,7 +1052,7 @@
     var fs = AUTH.firestore();
     Promise.all([fs.collection('catalog').get(), fs.collection('categories').get()]).then(function (r) {
       P = r[0].docs.map(function (d) { return SHOP.normalize(Object.assign({ id: d.id }, d.data())); });
-      if (!r[1].empty) CATS = r[1].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      CATS = r[1].docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       start();
     }).catch(function () {
       app.innerHTML = '<div class="wrap done"><h1>Não foi possível carregar os produtos</h1><p>Confira sua conexão com a internet e tente de novo.</p>' +
