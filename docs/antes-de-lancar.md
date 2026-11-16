@@ -1,6 +1,8 @@
 # Antes de lançar: o que pedir à dona da loja
 
-Hoje o site usa valores de exemplo nestes pontos. Com as respostas, eu atualizo tudo de uma vez.
+Hoje o site usa valores de exemplo nestes pontos. **Pagamento, contato, endereço e entrega** a própria dona (ou você) preenche em **Gestão → Ajustes → Dados da loja**, sem mexer em código; o Painel avisa enquanto faltar algo. O resto, com as respostas, eu atualizo de uma vez.
+
+Depois de preencher, configure o WhatsApp Business com os textos de `docs/whatsapp-business.md`.
 
 ## Obrigatório
 

@@ -22,6 +22,8 @@
 .auth__submit:hover { background: var(--malva-deep); }
 .auth__box button[disabled] { opacity: .55; cursor: wait; }
 .auth__link { justify-self: center; border: 0; background: none; padding: .15rem; color: var(--accent-text, var(--malva-ink)); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: .92rem; }
+.auth__legal { margin: -.25rem 0 0; text-align: center; font-size: .8rem; color: var(--brown-2); }
+.auth__legal a { color: inherit; text-underline-offset: 2px; }
 .auth__switch { margin: 0; text-align: center; font-size: .92rem; color: var(--brown-2); }
 
 /* Conta no topo */

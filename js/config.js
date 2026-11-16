@@ -1,9 +1,11 @@
-// Configuração da loja — edite estes valores antes de divulgar o site.
+// Valores padrão da loja. Com o login ativo, a dona edita tudo em Gestão → Ajustes → Dados da loja
+// (WhatsApp, PIX, cidade, retirada, horário, Instagram e frete) e esses dados substituem os daqui.
 window.JM_CONFIG = {
   storeName: 'JM Store',
 
   // Número do WhatsApp que recebe os pedidos: 55 + DDD + número, só dígitos.
   whatsapp: '5542998692070',
+  email: 'jmstore403@gmail.com',
 
   // Chave PIX mostrada no fim do pedido.
   pixKey: 'sua-chave-pix@email.com',

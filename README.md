@@ -32,7 +32,7 @@ O que é enviado (pedidos de demonstração não enviam nada):
 - **Mudança de status** (confirmado, pago, saiu para entrega, pronto para retirada, finalizado, cancelado): e-mail para o cliente.
 - **Pedido de devolução:** e-mail e notificação para a loja; quando a loja aprova, recusa ou conclui, e-mail para o cliente.
 
-Funciona com as funções da pasta `functions/` (precisam do plano Blaze do Firebase). Os dados da loja usados nos e-mails ficam em `functions/loja.js`; mantenha igual ao `js/config.js`.
+Funciona com as funções da pasta `functions/` (precisam do plano Blaze do Firebase). WhatsApp, chave PIX e endereço de retirada dos e-mails vêm de Gestão → Ajustes → Dados da loja (os valores de `functions/loja.js` são só o padrão).
 
 ### Publicar as funções e as regras (Cloud Shell, no navegador)
 1. Abra https://shell.cloud.google.com com a conta Google dona do projeto Firebase.
@@ -85,12 +85,16 @@ Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o me
 - **Cupons:** crie códigos de desconto em porcentagem ou valor fixo, com pedido mínimo opcional. Dá para pausar e reativar.
 - **Clientes:** contato com link para o WhatsApp, total gasto e quanto cada um deve.
 - **Excluir vários de uma vez:** em Produtos, Categorias, Clientes, Vendas, Cupons e Pedidos (inclusive os personalizados), marque as caixinhas (ou "selecionar todos") e use **Excluir selecionados**. Vale a mesma regra da exclusão de um item só: venda excluída devolve o estoque, cliente excluído deixa as vendas como "Balcão", categoria com produtos não é apagada e pedido com estoque reservado devolve a reserva.
+- **Ajustes → Dados da loja:** a dona preenche WhatsApp, cidade, chave PIX e titular, endereço e horário de retirada, Instagram e as regiões de entrega (bairros, frete e prazo). Tudo aparece na hora na loja, no fechamento do pedido, nos e-mails e na política de privacidade. Sem nenhuma região, a loja oferece só retirada. Enquanto faltar algo, o Painel avisa.
 - **Backup:** com o login ativo, os dados ficam na nuvem e aparecem em qualquer aparelho do admin, atualizando ao vivo. Mesmo assim, baixe um backup de vez em quando.
-- **Treino e lançamento** (aba Backup): **Carregar demonstração** preenche clientes, vendas, pedidos e um cupom fictícios para conhecer a gestão (o estoque não muda); **Tirar demonstração** apaga só esses dados. **Preparar para o lançamento** apaga produtos, vendas, pedidos e clientes de teste (você escolhe) para começar as vendas de verdade; depois disso a loja nunca mais mostra os produtos de exemplo.
+- **Treino e lançamento** (aba Ajustes): **Carregar demonstração** preenche clientes, vendas, pedidos e um cupom fictícios para conhecer a gestão (o estoque não muda); **Tirar demonstração** apaga só esses dados. **Preparar para o lançamento** apaga produtos, vendas, pedidos e clientes de teste (você escolhe) para começar as vendas de verdade; depois disso a loja nunca mais mostra os produtos de exemplo.
 
 ## Como editar
 
-- **WhatsApp, PIX, endereço de retirada e frete por bairro:** `js/config.js`
+- **WhatsApp, PIX, endereço de retirada e frete por bairro:** na gestão, em **Ajustes → Dados da loja** (o `js/config.js` guarda só os valores padrão)
+- **Política de privacidade:** página `#/privacidade` da loja (texto em `js/app.js`, função `viewPrivacy`), com link no rodapé e na tela de login. É um modelo baseado na LGPD; vale uma revisão de um advogado se a loja crescer.
+- **Prévia do link** (WhatsApp, Instagram, Facebook): tags `og:` no `index.html` e a imagem `img/og.png`. Se o endereço do site mudar, troque as URLs dessas tags.
+- **WhatsApp Business:** textos prontos de saudação, ausência, respostas rápidas e etiquetas em `docs/whatsapp-business.md`.
 - **Produtos e categorias:** pela gestão. O arquivo `js/products.js` é só o catálogo inicial da primeira abertura da gestão (e da loja sem login configurado).
 - **Regras do Firestore:** sempre que `firestore.rules` mudar, cole o conteúdo de novo no console (Firestore → Regras → Publicar).
 

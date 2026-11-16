@@ -31,6 +31,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Dados da loja (WhatsApp, PIX, endereço, frete): a loja e os e-mails leem; só o admin edita.
+    match /site/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Vitrine: cópia pública dos produtos (sem o custo), mantida pela gestão.
     match /catalog/{id} {
       allow read: if true;

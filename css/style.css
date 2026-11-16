@@ -444,3 +444,13 @@ svg [fill="#E8C9A0"] { fill: var(--t-sand); }
 .req__photo { width: 84px; height: 84px; flex: none; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); }
 .req p + p { margin-top: .2rem; }
 @media (max-width: 760px) { .custom-cta__in { padding: 1.5rem 1.25rem; } .custom-cta .btn { width: 100%; justify-content: center; } }
+
+/* Política de privacidade */
+.legal { max-width: 720px; padding: 1.5rem 0 5rem; }
+.legal h1 { font-size: clamp(2.2rem, 4.5vw, 3.2rem); margin: .75rem 0 .25rem; }
+.legal > p { margin-top: 1rem; }
+.legal section { margin-top: 2rem; }
+.legal h2 { font-size: 1.5rem; margin-bottom: .5rem; }
+.legal ul { padding-left: 1.2rem; display: grid; gap: .45rem; }
+.legal p + p { margin-top: .6rem; }
+.legal a { color: var(--accent-text); }
