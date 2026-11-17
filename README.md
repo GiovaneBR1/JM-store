@@ -76,14 +76,14 @@ Para atualizar depois (mudou `functions/` ou `firestore.rules`): no Cloud Shell,
 - **Conferência dos pedidos no servidor** (`functions/conferir.js`): cada pedido novo é recalculado com os preços do cadastro, o cupom de verdade e o frete da região. Se algo não bater (ex.: preço de R$ 0,01 ou cupom inventado), o pedido **não é confirmado sozinho**, aparece com um alerta vermelho em Pedidos e a loja recebe e-mail e notificação com o motivo e o total certo.
 
 ### Proteção contra robôs (App Check), ativar antes de divulgar
-Faz o banco aceitar só acessos vindos do site de verdade. Grátis.
-1. Em https://www.google.com/recaptcha/admin/create: tipo **reCAPTCHA v3 (com base em pontuação)**, domínios `giovanebr1.github.io` (e o domínio próprio, quando houver). Envie. Guarde a **chave do site** e a **chave secreta**.
-2. Console do Firebase → **App Check** → aba **Apps** → no app da Web, **reCAPTCHA** → cole a **chave secreta** → Salvar.
-3. Coloque a **chave do site** em `appCheckKey` no `js/firebase-config.js` (é pública), faça o merge e espere o site atualizar.
+Faz o banco aceitar só acessos vindos do site de verdade. Usa o **reCAPTCHA Enterprise**, que no Google Cloud aparece como **Fraud Defense** (o reCAPTCHA v3 "clássico" não é mais aceito pelo Firebase). Grátis até 10 mil verificações por mês.
+1. No Google Cloud (mesmo projeto do Firebase): menu → **Segurança → reCAPTCHA** (ou "Fraud Defense") → ative a API se pedir → **Criar chave**: plataforma **Site**, domínios `giovanebr1.github.io` (e o domínio próprio, quando houver), **sem** o desafio de caixa de seleção (pontuação). Copie o **ID da chave**.
+2. Console do Firebase → **App Check** → aba **Apps** → no app da Web, **reCAPTCHA Enterprise** → cole o ID da chave → em "Vida útil do token", use **1 dia** → Salvar. Não há chave secreta.
+3. Coloque o ID da chave em `appCheckKey` no `js/firebase-config.js` (é público), faça o merge e espere o site atualizar.
 4. Use o site normalmente por 1 ou 2 dias e veja em **App Check → APIs → Cloud Firestore** se quase todos os acessos aparecem como **verificados**.
 5. Só então clique em **Aplicar (Enforce)** no Cloud Firestore (e, se quiser, no Authentication). A partir daí, acessos de fora do site são recusados.
 
-Se trocar o domínio do site, adicione o domínio novo no reCAPTCHA (passo 1) antes de trocar.
+Se trocar o domínio do site, adicione o domínio novo na chave (passo 1) antes de trocar.
 
 ### Cuidados com as contas (o maior risco é alguém entrar numa conta)
 - **Verificação em duas etapas** na conta Google da dona (admin), no Gmail da loja e na conta dona do projeto Firebase.
