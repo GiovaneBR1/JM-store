@@ -13,5 +13,5 @@
   vapidKey: 'BFaKdVprMXc_7I9UjokCHrI2ynp7uCXezRaUGGoQsP4Sn1T6h3FZWeeCtJerosYDMn1ud-dAdgi5Mhjqw3mUw6I',
   // App Check (proteção contra robôs): chave do SITE do reCAPTCHA v3 (é pública). Vazio = desligado.
   // Passo a passo no README, seção "Proteção contra robôs (App Check)".
-  appCheckKey: ''
+  appCheckKey: '6Le1pCUuAAAAAOf4SeDztQa2ak9PimMjHogR3VPR'
 };
