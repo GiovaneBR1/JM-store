@@ -11,7 +11,7 @@
   messagingSenderId: '1058791811588',
   // Chave pública para as notificações da gestão: Configurações do projeto → Cloud Messaging → Certificados push da Web.
   vapidKey: 'BFaKdVprMXc_7I9UjokCHrI2ynp7uCXezRaUGGoQsP4Sn1T6h3FZWeeCtJerosYDMn1ud-dAdgi5Mhjqw3mUw6I',
-  // App Check (proteção contra robôs): chave do SITE do reCAPTCHA v3 (é pública). Vazio = desligado.
-  // Passo a passo no README, seção "Proteção contra robôs (App Check)".
-  appCheckKey: '6Le1pCUuAAAAAOf4SeDztQa2ak9PimMjHogR3VPR'
+  // App Check (proteção contra robôs): chave do site do reCAPTCHA Enterprise / Fraud Defense (é pública).
+  // Vazio = desligado. Passo a passo no README, seção "Proteção contra robôs (App Check)".
+  appCheckKey: '6Le0qCUuAAAAAKhX9qAHoG1uz0pIJwWao1tHl2Gc'
 };
