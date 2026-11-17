@@ -9,6 +9,7 @@
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { reservar, devolver, totalStock } = require('./estoque');
+const { conferirPedido } = require('./conferir');
 const { defineSecret } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
@@ -111,11 +112,14 @@ function entregaHtml(o) {
     : `<p style="margin:0 0 8px;font-size:14px"><b>Entrega:</b> ${esc(o.delivery.address || '')}</p>`;
 }
 
-function emailLojaPedidoNovo(o, faltam) {
+function emailLojaPedidoNovo(o, faltam, conf) {
   const c = o.customer || {};
-  const aviso = o.status === 'confirmado'
+  const alerta = conf && !conf.ok
+    ? `<div style="margin:0 0 10px;padding:10px 12px;background:#F6E3E3;border-radius:6px;font-size:14px;color:#8A1F2B"><b>⚠️ Os valores deste pedido não conferem com a loja.</b> Ele pode ter sido montado fora do site, ou um preço mudou durante a compra. Não foi confirmado automaticamente.<ul style="margin:6px 0 0;padding-left:18px">${conf.problemas.map((p) => '<li>' + esc(p) + '</li>').join('')}</ul><p style="margin:6px 0 0">Total certo: <b>${brl(conf.esperado.total)}</b> (o pedido diz ${brl(o.total)}).</p></div>`
+    : '';
+  const aviso = alerta || (o.status === 'confirmado'
     ? `<p style="margin:0 0 10px;padding:10px 12px;background:#E7F0E5;border-radius:6px;font-size:14px;color:#3F6B45"><b>Confirmado automaticamente.</b> O estoque já foi reservado.</p>`
-    : faltam && faltam.length ? `<p style="margin:0 0 10px;padding:10px 12px;background:#F6EEDB;border-radius:6px;font-size:14px;color:#7A5A10"><b>⚠️ Precisa da sua atenção:</b> falta estoque de ${esc(faltam.join(', '))}. Confira e confirme o pedido na gestão.</p>` : '';
+    : faltam && faltam.length ? `<p style="margin:0 0 10px;padding:10px 12px;background:#F6EEDB;border-radius:6px;font-size:14px;color:#7A5A10"><b>⚠️ Precisa da sua atenção:</b> falta estoque de ${esc(faltam.join(', '))}. Confira e confirme o pedido na gestão.</p>` : '');
   return layout(`Novo pedido #${esc(o.code)}`, aviso +
     `<p style="margin:0 0 8px;font-size:14px"><b>${esc(c.name)}</b> · ${esc(c.phone)}${c.email ? ' · ' + esc(c.email) : ''}</p>` +
     itensHtml(o) + entregaHtml(o) +
@@ -162,8 +166,14 @@ exports.pedidoCriado = onDocumentCreated({ document: 'orders/{id}', ...OPCOES },
   if (!o || o.demo) return;
   const c = o.customer || {}, cfg = await ajustes();
   let faltam = [];
-  // Confirmação automática: só quando todos os itens têm estoque; o estoque fica reservado.
-  if (cfg.autoConfirm && o.status === 'novo') {
+  // Confere preços, cupom, frete e total com os dados da loja. Se não bater, marca o pedido e avisa a loja.
+  let conf = { ok: true };
+  try {
+    conf = await conferirPedido(o);
+    if (!conf.ok) await event.data.ref.update({ conferencia: { ok: false, problemas: conf.problemas, esperado: conf.esperado } });
+  } catch (e) { logger.error('Falha ao conferir o pedido', { pedido: o.code, erro: e.message }); }
+  // Confirmação automática: só quando os valores conferem e todos os itens têm estoque; o estoque fica reservado.
+  if (cfg.autoConfirm && o.status === 'novo' && conf.ok) {
     try {
       const r = await reservar(event.data.ref);
       if (r.ok) o.status = 'confirmado'; else faltam = r.faltam || [];
@@ -171,9 +181,9 @@ exports.pedidoCriado = onDocumentCreated({ document: 'orders/{id}', ...OPCOES },
   }
   const ok = o.status === 'confirmado';
   await Promise.all([
-    enviarEmail(LOJA.emailLoja, `🛍️ Novo pedido #${o.code} — ${c.name || 'cliente'} — ${brl(o.total)}${faltam.length ? ' — falta estoque' : ''}`, emailLojaPedidoNovo(o, faltam)),
+    enviarEmail(LOJA.emailLoja, `${conf.ok ? '🛍️' : '⚠️'} Novo pedido #${o.code} — ${c.name || 'cliente'} — ${brl(o.total)}${conf.ok ? '' : ' — VALORES NÃO CONFEREM'}${faltam.length ? ' — falta estoque' : ''}`, emailLojaPedidoNovo(o, faltam, conf)),
     enviarEmail(c.email, ok ? `Seu pedido #${o.code} está confirmado — ${LOJA.nome}` : `Recebemos seu pedido #${o.code} — ${LOJA.nome}`, emailClientePedidoRecebido(o)),
-    notificarLoja(`🛍️ Novo pedido #${o.code}`, `${c.name || 'Cliente'} · ${brl(o.total)} · ${o.payment || ''}${ok ? ' · confirmado' : faltam.length ? ' · falta estoque' : ''}`, '#/pedidos')
+    notificarLoja(`${conf.ok ? '🛍️' : '⚠️'} Novo pedido #${o.code}`, `${c.name || 'Cliente'} · ${brl(o.total)} · ${o.payment || ''}${!conf.ok ? ' · valores não conferem' : ok ? ' · confirmado' : faltam.length ? ' · falta estoque' : ''}`, '#/pedidos')
   ]);
 }));
 

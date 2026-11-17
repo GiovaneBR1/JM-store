@@ -159,6 +159,14 @@
   // ---------- estado ----------
   if (enabled) {
     firebase.initializeApp(cfg);
+    // App Check: cada acesso ao banco leva um "atestado" de que veio do site de verdade (reCAPTCHA v3, invisível).
+    // Com a proteção ativada no console do Firebase, scripts e robôs fora do site são recusados.
+    if (cfg.appCheckKey && firebase.appCheck) {
+      try {
+        firebase.appCheck().activate(new firebase.appCheck.ReCaptchaV3Provider(cfg.appCheckKey), true);
+        document.documentElement.classList.add('has-appcheck');
+      } catch (e) { /* sem App Check o site continua funcionando; o console mostra os acessos não verificados */ }
+    }
     auth = firebase.auth();
     fs = firebase.firestore();
     auth.languageCode = 'pt';

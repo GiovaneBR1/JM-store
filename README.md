@@ -69,6 +69,28 @@ Para atualizar depois (mudou `functions/` ou `firestore.rules`): no Cloud Shell,
 1. No console do Firebase: ⚙ Configurações do projeto → **Cloud Messaging** → Configuração da Web → **Certificados push da Web** → Gerar par de chaves. Copie a chave e coloque em `vapidKey` no `js/firebase-config.js` (é pública).
 2. No celular da dona: abra a gestão, **adicione à tela inicial** (no iPhone é obrigatório; no Android é opcional), abra por lá, vá em **Pedidos** e toque em **Ativar avisos neste aparelho**.
 
+## Segurança
+
+**Já está ativo:**
+- **Regras do banco** (`firestore.rules`): cliente só vê os próprios pedidos; custo, vendas, clientes e ajustes são só do admin. Na criação de um pedido, só são aceitos os campos que o site envia: um pedido não pode chegar como "reservado", "pago", "venda lançada" ou "demonstração".
+- **Conferência dos pedidos no servidor** (`functions/conferir.js`): cada pedido novo é recalculado com os preços do cadastro, o cupom de verdade e o frete da região. Se algo não bater (ex.: preço de R$ 0,01 ou cupom inventado), o pedido **não é confirmado sozinho**, aparece com um alerta vermelho em Pedidos e a loja recebe e-mail e notificação com o motivo e o total certo.
+
+### Proteção contra robôs (App Check), ativar antes de divulgar
+Faz o banco aceitar só acessos vindos do site de verdade. Grátis.
+1. Em https://www.google.com/recaptcha/admin/create: tipo **reCAPTCHA v3 (com base em pontuação)**, domínios `giovanebr1.github.io` (e o domínio próprio, quando houver). Envie. Guarde a **chave do site** e a **chave secreta**.
+2. Console do Firebase → **App Check** → aba **Apps** → no app da Web, **reCAPTCHA** → cole a **chave secreta** → Salvar.
+3. Coloque a **chave do site** em `appCheckKey` no `js/firebase-config.js` (é pública), faça o merge e espere o site atualizar.
+4. Use o site normalmente por 1 ou 2 dias e veja em **App Check → APIs → Cloud Firestore** se quase todos os acessos aparecem como **verificados**.
+5. Só então clique em **Aplicar (Enforce)** no Cloud Firestore (e, se quiser, no Authentication). A partir daí, acessos de fora do site são recusados.
+
+Se trocar o domínio do site, adicione o domínio novo no reCAPTCHA (passo 1) antes de trocar.
+
+### Cuidados com as contas (o maior risco é alguém entrar numa conta)
+- **Verificação em duas etapas** na conta Google da dona (admin), no Gmail da loja e na conta dona do projeto Firebase.
+- Colocar a dona como **proprietária** do projeto no Firebase (Configurações do projeto → Usuários e permissões) e a **cobrança** no cartão dela.
+- **Alerta de orçamento** no Google Cloud (Faturamento → Orçamentos e alertas), por exemplo R$ 10 por mês.
+- **Backup** em Gestão → Ajustes → Baixar backup, pelo menos uma vez por mês.
+
 ## Gestão da loja
 
 Abra `admin.html` (https://giovanebr1.github.io/JM-store/admin.html) ou use o menu da conta → **Painel de gestão**.

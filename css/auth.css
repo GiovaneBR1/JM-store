@@ -50,3 +50,9 @@
   .acct { position: static; }
   .acct__menu { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); top: calc(100% + .25rem); min-width: 0; }
 }
+
+/* App Check (reCAPTCHA v3): o selo flutuante cobriria o botão do WhatsApp; o aviso fica no rodapé da loja. */
+.grecaptcha-badge { visibility: hidden !important; }
+.foot__recaptcha { display: none; }
+.has-appcheck .foot__recaptcha { display: block; text-align: center; font-size: .75rem; opacity: .7; margin: .25rem 1rem 0; }
+.foot__recaptcha a { color: inherit; }

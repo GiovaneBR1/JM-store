@@ -597,6 +597,9 @@
             (wa ? ' · <a href="' + wa + '" target="_blank" rel="noopener">' + esc(o.customer.phone) + '</a>' : '') + '</p></div>' +
             '<b class="order__total">' + brl(o.total) + '</b></header>' +
           (o.reserved && !o.saleId ? '<p class="order__flags"><span class="pill pill--ok">Estoque reservado</span>' + (o.autoConfirmed ? ' <span class="pill pill--neutral">Confirmado automaticamente</span>' : '') + '</p>' : '') +
+          (o.conferencia && !o.conferencia.ok ? '<div class="return return--err"><p><b>⚠️ Os valores deste pedido não conferem com a loja.</b> Pode ter sido montado fora do site, ou um preço mudou durante a compra. Confira antes de confirmar.</p><ul class="order__problems">' +
+            o.conferencia.problemas.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>' +
+            (o.conferencia.esperado ? '<p class="muted">Total certo: <b>' + brl(o.conferencia.esperado.total) + '</b> (o pedido diz ' + brl(o.total) + ').</p>' : '') + '</div>' : '') +
           (o.status === 'cancelado' && o.autoCancelled ? '<p class="order__flags"><span class="pill pill--warn">Cancelado automaticamente: PIX não pago</span></p>' : '') +
           '<ul class="order__items">' + o.items.map(function (i) {
             return '<li>' + i.qty + 'x ' + esc(i.name) + (i.variant ? ' (' + esc(i.variant) + ')' : '') + ' <span class="muted">' + brl(i.price * i.qty) + '</span></li>';
@@ -1012,7 +1015,7 @@
       '<div class="field"><span>Conteúdo da embalagem</span><div class="content-row"><input name="contentQty" ' + money + ' value="' + esc(content.qty || '') + '" placeholder="Ex.: 100" aria-label="Quantidade">' +
         '<select name="contentUnit" aria-label="Unidade">' + SHOP.UNITS.map(function (u) { return opt(u, u, content.unit || 'ml'); }).join('') + '</select></div></div>' +
       field('Custo (R$)', 'cost', p.cost, money + ' placeholder="Quanto você pagou"') +
-      field('Avisar quando chegar em', 'minStock', p.minStock, 'type="number" step="1" min="0"') +
+      field('Estoque mínimo (avisar ao chegar em)', 'minStock', p.minStock, 'type="number" step="1" min="0"') +
       '<label class="check field--full"><input type="checkbox" id="has-opts"' + (hasOpts ? ' checked' : '') + '> Este produto tem opções (tamanho, cor, tom…), cada uma com preço e estoque</label>' +
       '<div class="field field--full" id="opts-box"' + (hasOpts ? '' : ' hidden') + '><span>Opções <small>(nome · preço · promo · estoque)</small></span><div class="opts" id="opts">' +
         (hasOpts ? p.variants.map(optionRow).join('') : optionRow() + optionRow()) + '</div>' +

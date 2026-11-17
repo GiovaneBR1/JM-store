@@ -43,3 +43,9 @@ Depois de preencher, configure o WhatsApp Business com os textos de `docs/whatsa
 - [ ] **CNPJ**, se tiver. Não é necessário agora, mas ajuda na v2 (PIX automático e WhatsApp automático).
 - [ ] **Domínio próprio** (ex.: jmstore.com.br). É pago, cerca de R$ 40 por ano no registro.br. O site continua funcionando sem ele.
 - [ ] **Texto de privacidade:** o site guarda nome, telefone, e-mail e endereço dos clientes para entregar os pedidos. Vale ter uma frase sobre isso no rodapé (eu escrevo, ela só confirma).
+
+## Segurança (antes de divulgar)
+- [ ] Ativar o **App Check** (passo a passo no README, seção "Proteção contra robôs").
+- [ ] **Verificação em duas etapas** nas contas Google da dona, do Gmail da loja e do dono do projeto Firebase.
+- [ ] Dona como **proprietária** do projeto Firebase e **cobrança** no cartão dela.
+- [ ] **Alerta de orçamento** no Google Cloud (ex.: R$ 10 por mês).
