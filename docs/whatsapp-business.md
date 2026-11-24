@@ -14,7 +14,7 @@ Os pedidos do site já chegam com o número (ex.: `#JM-AB12CD`), então dá para
 - **Categoria:** Saúde e beleza (ou "Loja de cosméticos", se aparecer)
 - **Descrição:**
   > Perfumes, maquiagens e muito mais. Cosméticos importados e de qualidade. Entrega em [cidade] ou retirada na loja. PIX ou cartão. Faça seu pedido pelo site 👇
-- **Site:** https://giovanebr1.github.io/JM-store/
+- **Site:** https://jmstore.netlify.app/
 - **Endereço:** [endereço de retirada]
 - **Horário:** [dias e horários de atendimento]
 - **E-mail:** jmstore403@gmail.com
@@ -26,7 +26,7 @@ Os pedidos do site já chegam com o número (ex.: `#JM-AB12CD`), então dá para
 
 > Oi! Que bom ter você aqui na JM Store 💖
 > Se você mandou um pedido pelo site, ele já chegou pra gente e vamos confirmar o estoque em instantes.
-> Quer ver os produtos? Acesse: https://giovanebr1.github.io/JM-store/
+> Quer ver os produtos? Acesse: https://jmstore.netlify.app/
 > Não achou o que procura? Faça um pedido personalizado no site que a gente procura pra você ✨
 
 ---
