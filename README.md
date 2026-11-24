@@ -2,18 +2,18 @@
 
 Loja de cosméticos importados. O cliente escolhe os produtos, informa a entrega e o pedido abre pronto no WhatsApp da loja para confirmar e pagar no PIX.
 
-Site: https://jmstore.netlify.app/ (hospedado no Netlify; veja "Hospedagem")
+Site: https://jmstoresite.netlify.app/ (hospedado no Netlify; veja "Hospedagem")
 
 ## Hospedagem (Netlify)
 
-O site é estático e fica no Netlify, em https://jmstore.netlify.app (configuração em `netlify.toml`). Cada merge no `main` publica sozinho.
+O site é estático e fica no Netlify, em https://jmstoresite.netlify.app (configuração em `netlify.toml`). Cada merge no `main` publica sozinho.
 
 **Conectar (uma vez):**
 1. Em https://app.netlify.com, entre com o GitHub → **Add new site → Import an existing project → GitHub** → repositório `JM-store`, branch `main`. Build command e Publish directory já vêm do `netlify.toml` (deixe como estão) → **Deploy**.
-2. **Site configuration → Change site name** → `jmstore` (o endereço vira `jmstore.netlify.app`).
-3. Firebase → Authentication → Configurações → **Domínios autorizados** → adicionar `jmstore.netlify.app` (sem isso, o login não funciona).
-4. Google Cloud → Segurança → reCAPTCHA (Fraud Defense) → a chave do site → adicionar o domínio `jmstore.netlify.app`.
-5. Se restringiu a chave do Firebase (APIs e serviços → Credenciais), adicionar `https://jmstore.netlify.app/*`.
+2. **Site configuration → Change site name** → `jmstoresite` (o endereço vira `jmstoresite.netlify.app`).
+3. Firebase → Authentication → Configurações → **Domínios autorizados** → adicionar `jmstoresite.netlify.app` (sem isso, o login não funciona).
+4. Google Cloud → Segurança → reCAPTCHA (Fraud Defense) → a chave do site → adicionar o domínio `jmstoresite.netlify.app`.
+5. Se restringiu a chave do Firebase (APIs e serviços → Credenciais), adicionar `https://jmstoresite.netlify.app/*`.
 6. Cloud Shell: `cd JM-store && git pull` e o comando de `deploy` (os links dos e-mails passam para o endereço novo).
 
 O endereço antigo (`giovanebr1.github.io/JM-store`) leva sozinho para o novo assim que o Netlify estiver no ar. Depois de um tempo, dá para desligar o GitHub Pages (Settings → Pages).
@@ -31,7 +31,7 @@ O login usa o **Firebase**, que é gratuito para este uso. Enquanto ele não est
 
 1. Entre em https://console.firebase.google.com com a conta Google da loja e clique em **Criar projeto** (pode desligar o Google Analytics).
 2. **Authentication** → **Vamos começar** → em *Método de login*, ative **E-mail/senha** e **Google**.
-3. Ainda em Authentication → **Configurações** → **Domínios autorizados** → **Adicionar domínio**: `jmstore.netlify.app` (e o domínio próprio, quando houver).
+3. Ainda em Authentication → **Configurações** → **Domínios autorizados** → **Adicionar domínio**: `jmstoresite.netlify.app` (e o domínio próprio, quando houver).
 4. **Firestore Database** → **Criar banco de dados** → escolha a região `southamerica-east1 (São Paulo)` → modo de **produção**.
 5. No Firestore, aba **Regras**: apague o que estiver lá, cole o conteúdo do arquivo `firestore.rules` deste repositório e clique em **Publicar**.
 6. Engrenagem ⚙ → **Configurações do projeto** → em *Seus apps*, clique no ícone **</>** (Web), dê um nome e registre. Copie `apiKey`, `authDomain`, `projectId` e `appId` para `js/firebase-config.js`, depois faça commit e push.
@@ -93,7 +93,7 @@ Para atualizar depois (mudou `functions/` ou `firestore.rules`): no Cloud Shell,
 
 ### Proteção contra robôs (App Check), ativar antes de divulgar
 Faz o banco aceitar só acessos vindos do site de verdade. Usa o **reCAPTCHA Enterprise**, que no Google Cloud aparece como **Fraud Defense** (o reCAPTCHA v3 "clássico" não é mais aceito pelo Firebase). Grátis até 10 mil verificações por mês.
-1. No Google Cloud (mesmo projeto do Firebase): menu → **Segurança → reCAPTCHA** (ou "Fraud Defense") → ative a API se pedir → **Criar chave**: plataforma **Site**, domínios `jmstore.netlify.app` (e o domínio próprio, quando houver), **sem** o desafio de caixa de seleção (pontuação). Copie o **ID da chave**.
+1. No Google Cloud (mesmo projeto do Firebase): menu → **Segurança → reCAPTCHA** (ou "Fraud Defense") → ative a API se pedir → **Criar chave**: plataforma **Site**, domínios `jmstoresite.netlify.app` (e o domínio próprio, quando houver), **sem** o desafio de caixa de seleção (pontuação). Copie o **ID da chave**.
 2. Console do Firebase → **App Check** → aba **Apps** → no app da Web, **reCAPTCHA Enterprise** → cole o ID da chave → em "Vida útil do token", use **1 dia** → Salvar. Não há chave secreta.
 3. Coloque o ID da chave em `appCheckKey` no `js/firebase-config.js` (é público), faça o merge e espere o site atualizar.
 4. Use o site normalmente por 1 ou 2 dias e veja em **App Check → APIs → Cloud Firestore** se quase todos os acessos aparecem como **verificados**.
@@ -109,7 +109,7 @@ Se trocar o domínio do site, adicione o domínio novo na chave (passo 1) antes 
 
 ## Gestão da loja
 
-Abra `admin.html` (https://jmstore.netlify.app/admin.html) ou use o menu da conta → **Painel de gestão**.
+Abra `admin.html` (https://jmstoresite.netlify.app/admin.html) ou use o menu da conta → **Painel de gestão**.
 
 - **Painel:** escolha o período (este mês, mês passado, últimos 3 meses, este ano, ano passado ou meses à escolha) e compare com o período anterior. Mostra faturamento, lucro, vendas, ticket médio, meta do mês, gráfico de faturamento e lucro, categorias, variação de preço, mais vendidos, melhores clientes, produtos parados, formas de pagamento e site x balcão.
 - **Exportar relatório:** no Painel, **Exportar planilha** baixa um .xlsx do período (Resumo, Vendas, Itens, Categorias, Produtos, Clientes, Pagamentos) e **Exportar PDF** abre o relatório para salvar como PDF ou imprimir.

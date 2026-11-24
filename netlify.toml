@@ -1,4 +1,4 @@
-# Hospedagem no Netlify (https://jmstore.netlify.app).
+# Hospedagem no Netlify (https://jmstoresite.netlify.app).
 # O site é estático: não há etapa de build, o Netlify publica a pasta do repositório como está.
 # Login, banco, e-mails e automações continuam no Firebase.
 

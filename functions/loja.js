@@ -2,7 +2,7 @@
 // os que a dona salva em Gestão → Ajustes → Dados da loja (documento site/loja) substituem estes.
 module.exports = {
   nome: 'JM Store',
-  site: 'https://jmstore.netlify.app/',
+  site: 'https://jmstoresite.netlify.app/',
   emailLoja: 'jmstore403@gmail.com',      // envia os e-mails e recebe os avisos de pedido
   whatsapp: '5542998692070',
   pixChave: 'sua-chave-pix@email.com',
