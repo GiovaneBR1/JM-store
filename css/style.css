@@ -359,7 +359,8 @@ main:focus { outline: none; }
 .logo--foot span { color: var(--t-gold); }
 .foot__copy { max-width: var(--w); margin: 0 auto; padding: 1rem 1.25rem 2rem; border-top: 1px solid rgba(255, 255, 255, .15); font-size: .85rem; opacity: .8; }
 
-.wa-float { position: fixed; right: 1.25rem; bottom: 1.25rem; width: 56px; height: 56px; border-radius: var(--r-full); background: #1F7A4D; display: grid; place-items: center; box-shadow: var(--shadow-lg); z-index: 40; }
+/* Fica acima do selo "powered by Netlify" que o Netlify mostra no canto de baixo. */
+.wa-float { position: fixed; right: 1.25rem; bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)); width: 56px; height: 56px; border-radius: var(--r-full); background: #1F7A4D; display: grid; place-items: center; box-shadow: var(--shadow-lg); z-index: 40; }
 .wa-float svg { width: 30px; height: 30px; fill: #fff; }
 
 .toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 200%); background: var(--strong); color: var(--on-strong); padding: .75rem 1.25rem; border-radius: var(--r-full); box-shadow: var(--shadow-lg); transition: transform .2s ease-out, visibility .2s; visibility: hidden; z-index: 70; max-width: calc(100% - 2rem); }
